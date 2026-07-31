@@ -72,13 +72,13 @@ nav svg{width:23px;height:23px}
 .alert ul{margin:0;padding-left:1.15em;font-size:.87rem}
 
 /* ---- option buttons ---- */
-.grid7{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
-.bristol{border:2px solid var(--line);background:#fff;border-radius:12px;padding:8px 4px;
-  display:flex;flex-direction:column;align-items:center;gap:2px;color:var(--text)}
+.grid7{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+.bristol{border:2px solid var(--line);background:#fff;border-radius:12px;padding:13px 10px;
+  display:flex;flex-direction:row;align-items:center;gap:10px;color:var(--text);text-align:left}
 .bristol.on{border-color:var(--accent);background:var(--accent-soft)}
-.bristol .num{font-weight:800;font-size:1.05rem}
-.bristol .desc{font-size:.6rem;color:var(--sub);line-height:1.25;text-align:center}
-.bristol svg{width:42px;height:24px}
+.bristol .num{font-weight:800;font-size:1.25rem;flex:0 0 auto;color:var(--accent);min-width:1em}
+.bristol .desc{font-size:.78rem;color:var(--sub);line-height:1.3}
+.bristol.on .desc{color:var(--text)}
 
 .chips{display:flex;flex-wrap:wrap;gap:8px}
 .chip{border:2px solid var(--line);background:#fff;border-radius:999px;padding:8px 14px;color:var(--text);font-size:.9rem}
@@ -115,6 +115,10 @@ details .inner{padding-bottom:14px}
 .dtbar{display:flex;align-items:center;justify-content:space-between;background:var(--accent-soft);
   border-radius:10px;padding:10px 14px;font-weight:700;color:var(--accent);margin-bottom:14px}
 .dtbar button{border:0;background:none;color:var(--accent);font-weight:700;font-size:.85rem}
+.dtedit{background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px;margin:-6px 0 14px}
+.dtedit .hm{display:flex;align-items:center;gap:8px;margin-top:10px}
+.dtedit .hm select{flex:1;width:auto;padding:12px;font-size:1.05rem;text-align:center}
+.dtedit .hm span{color:var(--sub);font-size:.9rem}
 
 /* ---- history ---- */
 .daygroup{margin-bottom:18px}
@@ -180,8 +184,18 @@ details .inner{padding-bottom:14px}
       <span id="stoolDtLabel"></span>
       <button onclick="toggleDt('stool')">時刻を変える ▸</button>
     </div>
-    <div id="stoolDtEdit" style="display:none;margin:-6px 0 14px">
-      <input type="datetime-local" id="stoolDt" onchange="onDtChange('stool')">
+    <div id="stoolDtEdit" class="dtedit" style="display:none">
+      <input type="date" id="stoolDate" onchange="onDtChange('stool')">
+      <div class="hm">
+        <select id="stoolHour" onchange="onDtChange('stool')"></select><span>時</span>
+        <select id="stoolMin"  onchange="onDtChange('stool')"></select><span>分</span>
+      </div>
+      <div class="chips" style="margin-top:10px">
+        <button type="button" class="chip" onclick="shiftDt('stool',0)">今</button>
+        <button type="button" class="chip" onclick="shiftDt('stool',-30)">30分前</button>
+        <button type="button" class="chip" onclick="shiftDt('stool',-60)">1時間前</button>
+        <button type="button" class="chip" onclick="shiftDt('stool',-120)">2時間前</button>
+      </div>
     </div>
 
     <div class="card">
@@ -242,8 +256,18 @@ details .inner{padding-bottom:14px}
       <span id="mealDtLabel"></span>
       <button onclick="toggleDt('meal')">時刻を変える ▸</button>
     </div>
-    <div id="mealDtEdit" style="display:none;margin:-6px 0 14px">
-      <input type="datetime-local" id="mealDt" onchange="onDtChange('meal')">
+    <div id="mealDtEdit" class="dtedit" style="display:none">
+      <input type="date" id="mealDate" onchange="onDtChange('meal')">
+      <div class="hm">
+        <select id="mealHour" onchange="onDtChange('meal')"></select><span>時</span>
+        <select id="mealMin"  onchange="onDtChange('meal')"></select><span>分</span>
+      </div>
+      <div class="chips" style="margin-top:10px">
+        <button type="button" class="chip" onclick="shiftDt('meal',0)">今</button>
+        <button type="button" class="chip" onclick="shiftDt('meal',-30)">30分前</button>
+        <button type="button" class="chip" onclick="shiftDt('meal',-60)">1時間前</button>
+        <button type="button" class="chip" onclick="shiftDt('meal',-120)">2時間前</button>
+      </div>
     </div>
 
     <div class="card">
@@ -504,10 +528,6 @@ const uuid = () => (crypto.randomUUID ? crypto.randomUUID()
   : "id-" + Date.now() + "-" + Math.random().toString(16).slice(2));
 const pad = n => String(n).padStart(2,"0");
 
-function localISO(d){ // datetime-local 用（ローカル時刻）
-  return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate())
-       +"T"+pad(d.getHours())+":"+pad(d.getMinutes());
-}
 function dateKey(d){ return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate()); }
 function fmtDT(iso){
   const d = new Date(iso);
@@ -530,18 +550,33 @@ function makeChips(containerId, values, selected, onPick, labelFn){
     el.appendChild(b);
   });
 }
-function bristolSVG(n){
-  const c = "#8a5a35";
-  const shapes = {
-    1:'<circle cx="10" cy="12" r="4"/><circle cx="21" cy="12" r="4"/><circle cx="32" cy="12" r="4"/>',
-    2:'<ellipse cx="21" cy="12" rx="15" ry="7"/><circle cx="12" cy="9" r="3.2" fill="#fff" fill-opacity=".25"/><circle cx="24" cy="15" r="3.2" fill="#fff" fill-opacity=".25"/>',
-    3:'<rect x="5" y="6" width="32" height="12" rx="6"/><rect x="14" y="6" width="1.6" height="12" fill="#fff" fill-opacity=".45"/><rect x="23" y="6" width="1.6" height="12" fill="#fff" fill-opacity=".45"/>',
-    4:'<rect x="4" y="7" width="34" height="10" rx="5"/>',
-    5:'<ellipse cx="12" cy="12" rx="8" ry="6"/><ellipse cx="27" cy="12" rx="8" ry="6"/>',
-    6:'<path d="M5 15c2-6 7-3 9-7 2 5 8 1 10 5 2-4 8-2 9 3 1 4-5 6-14 6s-16-2-14-7z"/>',
-    7:'<ellipse cx="21" cy="14" rx="17" ry="5"/><ellipse cx="21" cy="9" rx="8" ry="2.5" fill-opacity=".6"/>'
-  };
-  return '<svg viewBox="0 0 42 24" fill="'+c+'">'+shapes[n]+'</svg>';
+/* ---- 日時を選ぶ部品（時・分をリストから選ぶ方式） ----
+   スマホ標準の時刻ダイアログは機種によって分が5分刻みになるため、自前で用意している */
+function fillTimeSelects(kind){
+  const h = $(kind + "Hour"), m = $(kind + "Min");
+  if(h.options.length) return;
+  for(let i = 0; i < 24; i++) h.add(new Option(pad(i), i));
+  for(let i = 0; i < 60; i++) m.add(new Option(pad(i), i));
+}
+function syncDtInputs(kind, iso){
+  fillTimeSelects(kind);
+  const d = new Date(iso);
+  $(kind + "Date").value = dateKey(d);
+  $(kind + "Hour").value = d.getHours();
+  $(kind + "Min").value  = d.getMinutes();
+  $(kind + "DtLabel").textContent = fmtDT(iso);
+}
+function setDraftDt(kind, iso){
+  if(kind === "stool") S.stoolDraft.datetime = iso;
+  else                 S.mealDraft.datetime  = iso;
+}
+function shiftDt(kind, mins){
+  const d = new Date();
+  d.setMinutes(d.getMinutes() + mins);
+  d.setSeconds(0, 0);
+  const iso = d.toISOString();
+  setDraftDt(kind, iso);
+  syncDtInputs(kind, iso);
 }
 
 /* =========================================================
@@ -594,8 +629,7 @@ function isNight(iso){ const h = new Date(iso).getHours(); return h >= 0 && h < 
 
 function renderStool(){
   const d = S.stoolDraft;
-  $("stoolDtLabel").textContent = fmtDT(d.datetime);
-  $("stoolDt").value = localISO(new Date(d.datetime));
+  syncDtInputs("stool", d.datetime);
 
   // ブリストル
   const bb = $("bristolBtns"); bb.innerHTML = "";
@@ -603,7 +637,7 @@ function renderStool(){
     const el = document.createElement("button");
     el.type = "button";
     el.className = "bristol" + (d.bristol === b.n ? " on" : "");
-    el.innerHTML = bristolSVG(b.n) + '<span class="num">'+b.n+'</span><span class="desc">'+b.d+'</span>';
+    el.innerHTML = '<span class="num">'+b.n+'</span><span class="desc">'+b.d+'</span>';
     el.onclick = () => { d.bristol = (d.bristol === b.n ? null : b.n); renderStool(); };
     bb.appendChild(el);
   });
@@ -644,10 +678,13 @@ function toggleDt(kind){
   el.style.display = el.style.display === "none" ? "" : "none";
 }
 function onDtChange(kind){
-  const v = $(kind + "Dt").value; if(!v) return;
-  const iso = new Date(v).toISOString();
-  if(kind === "stool"){ S.stoolDraft.datetime = iso; $("stoolDtLabel").textContent = fmtDT(iso); }
-  else                { S.mealDraft.datetime  = iso; $("mealDtLabel").textContent  = fmtDT(iso); }
+  const dv = $(kind + "Date").value; if(!dv) return;
+  const [y, mo, da] = dv.split("-").map(Number);
+  const d = new Date(y, mo - 1, da,
+    Number($(kind + "Hour").value), Number($(kind + "Min").value), 0, 0);
+  const iso = d.toISOString();
+  setDraftDt(kind, iso);
+  $(kind + "DtLabel").textContent = fmtDT(iso);
 }
 async function saveStool(){
   const d = S.stoolDraft;
@@ -707,8 +744,7 @@ function currentTags(){
 }
 function renderMeal(){
   const d = S.mealDraft;
-  $("mealDtLabel").textContent = fmtDT(d.datetime);
-  $("mealDt").value = localISO(new Date(d.datetime));
+  syncDtInputs("meal", d.datetime);
   makeChips("mealTypeChips", MEAL_TYPES, d.mealType, v => { if(v){ d.mealType = v; renderMeal(); } });
 
   // 品目

@@ -1,7 +1,7 @@
 /* Service Worker
    アプリを更新したら、下の CACHE の数字を必ず1つ増やしてください。
    （増やさないと、スマホ側に古い画面が残り続けます） */
-const CACHE = "log-v1";
+const CACHE = "log-v2";
 
 const ASSETS = [
   "./",
