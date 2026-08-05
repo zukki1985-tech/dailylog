@@ -218,6 +218,7 @@ details .inner{padding-bottom:14px}
   <!-- ============ ホーム ============ -->
   <section id="v-home" class="view active">
     <div id="alerts"></div>
+    <div id="missing"></div>
     <div class="card">
       <div class="today">
         <div class="n" id="todayCount">0</div>
@@ -1741,6 +1742,40 @@ async function saveMeds(){
 }
 
 /* =========================================================
+   8h. 入力していない日のお知らせ（画面内だけ）
+   -----------------------------------------------------------
+   アプリを開いたときに、まだ入力していない日をホームに並べる。
+   スマホの通知は使わない。
+   ========================================================= */
+function dailyDone(k){
+  const r = S.daily.find(d => d.date === k);
+  if(r && (r.headache === "none" || r.headache === "yes")) return true;
+  return S.headaches.some(h => dateKey(new Date(h.startAt)) === k);
+}
+// 記録を始めた日以降で、まだ入力していない日（今日を除く）
+function missingDays(limit){
+  const dates = allDates();
+  if(!dates.length) return [];
+  const today = dateKey(new Date());
+  return dates.filter(k => k !== today && !dailyDone(k)).slice(-limit).reverse();
+}
+function renderMissing(){
+  const el = $("missing"); if(!el) return;
+  const m = missingDays(7);
+  if(!m.length){ el.innerHTML = ""; return; }
+  el.innerHTML = '<div class="alert" style="border-left-color:#c9702a;background:#fdf4e8;border-color:#e8cba0">'
+    + '<h3 style="color:#8a4d15">入力していない日が ' + m.length + ' 日あります</h3>'
+    + '<div class="chips" style="margin-top:8px">'
+    + m.map(k => {
+        const d = new Date(k + "T00:00:00");
+        return '<button type="button" class="chip" onclick="openDaily(\'' + k + '\')">'
+          + (d.getMonth()+1) + "/" + d.getDate() + "（" + "日月火水木金土"[d.getDay()] + "）</button>";
+      }).join("")
+    + '</div><div class="muted" style="margin-top:8px">'
+    + 'あとからでも入れられます。覚えている範囲で構いません。</div></div>';
+}
+
+/* =========================================================
    9. ホーム
    ========================================================= */
 function renderHome(){
@@ -1765,6 +1800,7 @@ function renderHome(){
   renderHeadacheCard();
   renderPressureCard();
   renderAlerts();
+  renderMissing();
 }
 function renderSleepCard(){
   const a = activeSleep();
@@ -2577,8 +2613,12 @@ async function loadAll(){
   // 経過時間の表示を1分ごとに更新
   setInterval(() => { if(S.view === "home"){ renderSleepCard(); renderHeadacheCard(); } }, 60000);
   if("serviceWorker" in navigator){
-    window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(()=>{}));
+    navigator.serviceWorker.register("sw.js").catch(()=>{});
   }
+  // 一度アプリを離れて戻ってきたときは、表示を作り直す
+  document.addEventListener("visibilitychange", () => {
+    if(document.visibilityState === "visible" && S.view === "home") renderHome();
+  });
 })();
 </script>
 </body>
