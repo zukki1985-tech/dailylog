@@ -453,11 +453,14 @@ details .inner{padding-bottom:14px}
       <h2>② 体調・ストレス</h2>
       <div class="hint">ざっくりで構いません。毎日つけることのほうが大事です。</div>
 
-      <label>ストレス（0=なし 〜 5=とても強い）</label>
+      <label>ストレス（0=とても強い 〜 5=まったくない）</label>
       <div class="bigchips" id="stressChips"></div>
 
       <label>全体的な体調（0=悪い 〜 5=良い）</label>
       <div class="bigchips" id="conditionChips"></div>
+      <div class="hint" style="margin:8px 0 0">
+        どちらも<strong>右にいくほど良い状態</strong>です（0が悪い、5が良い）。
+      </div>
 
       <label>この日の区分</label>
       <div class="chips" id="dayTypeChips"></div>
@@ -662,7 +665,9 @@ details .inner{padding-bottom:14px}
       <h2>天気・気圧の取得</h2>
       <div class="muted">
         Open-Meteo（無料・登録不要）から、指定した地点の気圧・天気・気温を取ってきます。
-        アプリを開いたときに自動で更新され、過去92日分もまとめて取り込みます。
+        <strong>アプリを開いたときに自動で取りにいきます（6時間に1回まで）。</strong>
+        初回は過去92日分がまとめて入ります。圏外・機内モードのときは取れないので、
+        電波のあるところで下のボタンを押してください。
       </div>
       <label>地点名</label>
       <input type="text" id="geoLabel">
@@ -1272,9 +1277,10 @@ function bigChips(containerId, values, selected, onPick, colorFn){
   });
 }
 function renderDailyChips(){
+  // ストレスも体調も「大きいほど良い」で統一している（0=悪い、5=良い）
   bigChips("stressChips",    [0,1,2,3,4,5], dailyDraft.stress,
     v => { dailyDraft.stress = v; renderDailyChips(); },
-    v => v >= 4 ? "#b3261e" : (v >= 2 ? "#c9702a" : "#4f7a3a"));
+    v => v >= 4 ? "#4f7a3a" : (v >= 2 ? "#c9702a" : "#b3261e"));
   bigChips("conditionChips", [0,1,2,3,4,5], dailyDraft.condition,
     v => { dailyDraft.condition = v; renderDailyChips(); },
     v => v >= 4 ? "#4f7a3a" : (v >= 2 ? "#c9702a" : "#b3261e"));
@@ -1660,6 +1666,12 @@ async function fetchWeather(force){
   }
   for(const k of Object.keys(map)) await dbPut("pressure", map[k]);
   await dbPut("kv", {key:"pressureFetchedAt", value:new Date().toISOString()});
+  // 天気まで取れたときだけ印を付ける。これが付くまでは毎回取りにいく
+  // （気圧だけの古いデータが残っていると、6時間の待ち時間で天気が入らないため）
+  if(j.daily && Array.isArray(j.daily.time)){
+    await dbPut("kv", {key:"weatherSchema", value:2});
+    S.weatherSchema = 2;
+  }
   S.pressure = await dbGetAll("pressure");
   return Object.keys(map).length + "日分";
 }
@@ -1989,7 +2001,7 @@ function renderHistory(){
       const bits = [];
       if(dl.dayType) bits.push(dl.dayType);
       if(dl.sleepHours != null) bits.push("睡眠" + dl.sleepHours + "h");
-      if(dl.stress != null) bits.push("ストレス" + dl.stress);
+      if(dl.stress != null) bits.push("ストレス" + dl.stress + "/5");
       if(dl.weight != null) bits.push(dl.weight + "kg");
       if(bits.length) head += "　/　" + bits.join("・");
     }
@@ -2279,8 +2291,9 @@ function anWork(){
   });
   const stShown = st.filter(b => b.n >= MIN_N);
   if(stShown.length){
-    html += '<h3 style="margin-top:18px;font-size:.9rem">ストレスの強さ別の頭痛</h3>'
-      + stShown.map(b => pctRow("ストレス " + b.v, b.k, b.n)).join("");
+    const lb = v => "ストレス " + v + (v === 0 ? "（とても強い）" : v === 5 ? "（なし）" : "");
+    html += '<h3 style="margin-top:18px;font-size:.9rem">ストレス別の頭痛（0=とても強い 〜 5=まったくない）</h3>'
+      + stShown.map(b => pctRow(lb(b.v), b.k, b.n)).join("");
   }
   return html + DISCLAIM;
 }
@@ -2592,15 +2605,33 @@ async function loadAll(){
     const r = kv.find(k => k.key === key);
     return r && r.value !== undefined && r.value !== null ? r.value : fallback;
   };
-  S.dict      = pick("dict",      JSON.parse(JSON.stringify(DEFAULT_DICT)));
-  S.templates = pick("templates", []);
-  S.meds      = pick("meds",      JSON.parse(JSON.stringify(DEFAULT_MEDS)));
-  S.geo       = pick("geo",       JSON.parse(JSON.stringify(DEFAULT_GEO)));
+  S.dict          = pick("dict",      JSON.parse(JSON.stringify(DEFAULT_DICT)));
+  S.templates     = pick("templates", []);
+  S.meds          = pick("meds",      JSON.parse(JSON.stringify(DEFAULT_MEDS)));
+  S.geo           = pick("geo",       JSON.parse(JSON.stringify(DEFAULT_GEO)));
+  S.weatherSchema = pick("weatherSchema", 0);
+  S.stressScale   = pick("stressScale",   1);
+}
+
+/* ストレスの目盛りを 0=強い→5=なし に変えたので、
+   それ以前に入力した値をひっくり返して意味を合わせる（1回だけ実行）*/
+async function migrateStressScale(){
+  if(S.stressScale >= 2) return;
+  for(const d of S.daily){
+    if(d.stress != null){
+      d.stress = 5 - Number(d.stress);
+      await dbPut("daily", d);
+    }
+  }
+  await dbPut("kv", {key:"stressScale", value:2});
+  S.stressScale = 2;
+  S.daily = await dbGetAll("daily");
 }
 (async function init(){
   try{
     await openDB();
     await loadAll();
+    await migrateStressScale();
   }catch(e){
     document.querySelector("main").innerHTML =
       '<div class="card"><h2>データベースを開けませんでした</h2><div class="muted">'
@@ -2608,8 +2639,9 @@ async function loadAll(){
     return;
   }
   renderHome();
-  // 気圧はネットにつながっていれば裏で取ってくる（失敗しても何も起きない）
-  fetchWeather(false).then(r => { if(r !== "skip") renderHome(); }).catch(() => {});
+  // 天気・気圧はネットにつながっていれば裏で取ってくる（失敗しても何も起きない）。
+  // まだ天気を一度も取れていないときは、6時間の待ち時間を無視して取りにいく。
+  fetchWeather(S.weatherSchema < 2).then(r => { if(r !== "skip") renderHome(); }).catch(() => {});
   // 経過時間の表示を1分ごとに更新
   setInterval(() => { if(S.view === "home"){ renderSleepCard(); renderHeadacheCard(); } }, 60000);
   if("serviceWorker" in navigator){
