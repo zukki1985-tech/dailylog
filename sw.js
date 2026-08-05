@@ -1,7 +1,7 @@
 /* Service Worker
    アプリを更新したら、下の CACHE の数字を必ず1つ増やしてください。
    （増やさないと、スマホ側に古い画面が残り続けます） */
-const CACHE = "log-v2";
+const CACHE = "log-v3";
 
 const ASSETS = [
   "./",
@@ -33,6 +33,8 @@ self.addEventListener("activate", e => {
 // 取得時：ネットワーク優先、つながらなければキャッシュ（＝オフラインでも起動する）
 self.addEventListener("fetch", e => {
   if (e.request.method !== "GET") return;
+  // 気圧API はキャッシュに入れず、そのままネットワークに任せる
+  if (e.request.url.indexOf("open-meteo.com") !== -1) return;
   e.respondWith(
     fetch(e.request)
       .then(res => {

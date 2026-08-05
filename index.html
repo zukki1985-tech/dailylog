@@ -136,6 +136,36 @@ details .inner{padding-bottom:14px}
 .badge.w{background:var(--warn-bg);color:var(--warn);font-weight:700}
 .dot{width:10px;height:10px;border-radius:50%;flex:0 0 10px;margin-top:8px}
 
+/* ---- クイック操作（睡眠・頭痛・薬） ---- */
+.toggle{width:100%;border:0;border-radius:14px;padding:18px;font-size:1.1rem;font-weight:700;
+  color:#fff;background:#4a4f7a;display:flex;align-items:center;justify-content:center;gap:10px}
+.toggle.awake{background:#b07d2a}
+.qgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
+.qbtn{border:1px solid var(--line);background:#fff;border-radius:12px;padding:14px 8px;
+  font-weight:700;color:var(--text)}
+.qbtn.on{border-color:#b3261e;background:#fdecea;color:#b3261e}
+.kpi{display:flex;justify-content:space-between;align-items:baseline;font-size:.82rem;
+  color:var(--sub);margin-top:10px}
+.kpi b{font-size:1.1rem;color:var(--text)}
+.toast{position:fixed;left:50%;bottom:88px;transform:translateX(-50%);background:#2b2f36;color:#fff;
+  padding:11px 16px;border-radius:999px;font-size:.85rem;z-index:60;box-shadow:0 3px 12px rgba(0,0,0,.3);
+  max-width:92%;display:flex;align-items:center;gap:6px}
+.toast button{background:none;border:0;color:#9ecbff;font-weight:700;padding:0 2px}
+
+/* ---- 分析 ---- */
+.barrow{display:flex;align-items:center;gap:8px;margin-bottom:7px;font-size:.8rem}
+.barrow .lb{flex:0 0 33%;color:var(--sub);word-break:break-word;line-height:1.3}
+.barrow .tr{flex:1;background:#eef1f5;border-radius:5px;height:18px;overflow:hidden}
+.barrow .fl{height:100%;background:var(--accent);border-radius:5px;min-width:2px}
+.barrow .fl.g{background:#5c8a4a}
+.barrow .vl{flex:0 0 68px;text-align:right;font-variant-numeric:tabular-nums;color:var(--text)}
+.note{font-size:.78rem;color:var(--sub);margin-top:10px;line-height:1.55}
+.nodata{color:var(--sub);font-size:.85rem;padding:8px 0}
+.cmp{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px}
+.cmp div{background:#fafbfc;border:1px solid var(--line);border-radius:10px;padding:10px;text-align:center}
+.cmp .v{font-size:1.3rem;font-weight:800;color:var(--accent)}
+.cmp .c{font-size:.72rem;color:var(--sub)}
+
 .tmplrow{display:flex;gap:8px;align-items:center;margin-bottom:8px}
 .tmplrow .chip{flex:1;text-align:left}
 .tmplrow .x{border:1px solid var(--line);background:#fff;border-radius:8px;padding:6px 10px;color:var(--sub)}
@@ -165,7 +195,26 @@ details .inner{padding-bottom:14px}
       <button class="bigbtn" onclick="openStool()"><span class="ico">📝</span>記録する</button>
       <button class="bigbtn alt" onclick="openMeal()"><span class="ico">🍽️</span>食事を記録</button>
     </div>
-    <button class="subbtn" onclick="openDaily()">今日の体調・睡眠を記録</button>
+    <div class="card">
+      <button class="toggle" id="sleepToggle" onclick="toggleSleep()"></button>
+      <div class="kpi"><span id="sleepInfo"></span>
+        <button class="chip" style="padding:4px 10px;font-size:.75rem" onclick="openSleep()">手で直す</button></div>
+    </div>
+
+    <div class="card">
+      <h2>頭痛</h2>
+      <button class="subbtn" id="headacheBtn" onclick="headacheMain()"></button>
+      <div class="qgrid" id="medBtns"></div>
+      <div class="kpi"><span id="medInfo"></span></div>
+    </div>
+
+    <div class="card" id="pressureCard">
+      <h2 id="pressureTitle">気圧</h2>
+      <div class="kpi"><span id="pressureNow"></span></div>
+      <div class="chart" id="chartP"></div>
+    </div>
+
+    <button class="subbtn" onclick="openDaily()">今日の体調・ストレスを記録</button>
     <div class="card" style="margin-top:14px">
       <h2>直近7日の回数</h2>
       <div class="chart" id="chart7"></div>
@@ -316,7 +365,7 @@ details .inner{padding-bottom:14px}
       <label style="margin-top:0">日付</label>
       <input type="date" id="d_date" onchange="loadDaily()">
 
-      <label>睡眠時間（時間）</label>
+      <label>睡眠時間（時間）— 就寝／起床ボタンを使った日は空欄でOK</label>
       <input type="number" id="d_sleep" step="0.5" min="0" max="24" inputmode="decimal" placeholder="例：6.5">
 
       <label>体重（kg）— 体重の変化を見るのに大切です</label>
@@ -340,6 +389,119 @@ details .inner{padding-bottom:14px}
     <button class="save" onclick="saveDaily()">保存する</button>
   </section>
 
+  <!-- ============ 頭痛 ============ -->
+  <section id="v-headache" class="view">
+    <div class="card">
+      <label style="margin-top:0">始まった日時</label>
+      <input type="date" id="hStartDate">
+      <div class="hm" style="display:flex;align-items:center;gap:8px;margin-top:10px">
+        <select id="hStartHour" style="flex:1;width:auto;padding:12px"></select><span class="muted">時</span>
+        <select id="hStartMin"  style="flex:1;width:auto;padding:12px"></select><span class="muted">分</span>
+      </div>
+
+      <label>おさまった日時（まだ続いているなら空のまま）</label>
+      <div id="hEndWrap">
+        <input type="date" id="hEndDate">
+        <div class="hm" style="display:flex;align-items:center;gap:8px;margin-top:10px">
+          <select id="hEndHour" style="flex:1;width:auto;padding:12px"></select><span class="muted">時</span>
+          <select id="hEndMin"  style="flex:1;width:auto;padding:12px"></select><span class="muted">分</span>
+        </div>
+      </div>
+      <div class="chips" style="margin-top:10px">
+        <button type="button" class="chip" onclick="endHeadacheNow()">今おさまった</button>
+        <button type="button" class="chip" onclick="clearHeadacheEnd()">まだ続いている</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <label style="margin-top:0">痛みの強さ（0〜10）<span style="color:var(--warn)">*</span></label>
+      <div class="chips" id="hSeverity"></div>
+      <div class="muted" style="margin-top:6px">0=なし　3=がまんできる　6=仕事がつらい　10=これ以上ない痛み</div>
+
+      <label>場所</label>
+      <div class="chips" id="hSide"></div>
+    </div>
+
+    <div class="card">
+      <div class="row"><input type="checkbox" id="h_throb"><label for="h_throb">ズキンズキンと脈打つ感じ</label></div>
+      <div class="row"><input type="checkbox" id="h_photo"><label for="h_photo">光がまぶしい・つらい</label></div>
+      <div class="row"><input type="checkbox" id="h_phono"><label for="h_phono">音がうるさく感じる</label></div>
+      <div class="row"><input type="checkbox" id="h_nausea"><label for="h_nausea">吐き気がある</label></div>
+      <div class="row"><input type="checkbox" id="h_aura"><label for="h_aura">前兆があった（チカチカする光・視野の欠けなど）</label></div>
+      <label>メモ（きっかけに心当たりがあれば）</label>
+      <textarea id="h_note" placeholder="自由記述"></textarea>
+    </div>
+
+    <button class="save" onclick="saveHeadache()">保存する</button>
+    <button class="ghost" id="headacheDelete" style="display:none" onclick="deleteEntry('headaches')">この記録を削除</button>
+  </section>
+
+  <!-- ============ 服薬 ============ -->
+  <section id="v-dose" class="view">
+    <div class="card">
+      <label style="margin-top:0">薬</label>
+      <div class="chips" id="doseMedChips"></div>
+
+      <label>日時</label>
+      <input type="date" id="doseDate">
+      <div class="hm" style="display:flex;align-items:center;gap:8px;margin-top:10px">
+        <select id="doseHour" style="flex:1;width:auto;padding:12px"></select><span class="muted">時</span>
+        <select id="doseMin"  style="flex:1;width:auto;padding:12px"></select><span class="muted">分</span>
+      </div>
+
+      <label>錠数</label>
+      <div class="chips" id="doseTablets"></div>
+
+      <label>効いたか（あとから入れてOK）</label>
+      <div class="chips" id="doseEffect"></div>
+
+      <label>メモ</label>
+      <textarea id="dose_note" placeholder="自由記述"></textarea>
+    </div>
+    <button class="save" onclick="saveDose()">保存する</button>
+    <button class="ghost" id="doseDelete" style="display:none" onclick="deleteEntry('doses')">この記録を削除</button>
+  </section>
+
+  <!-- ============ 睡眠の手直し ============ -->
+  <section id="v-sleep" class="view">
+    <div class="card">
+      <label style="margin-top:0">就寝</label>
+      <input type="date" id="slStartDate">
+      <div class="hm" style="display:flex;align-items:center;gap:8px;margin-top:10px">
+        <select id="slStartHour" style="flex:1;width:auto;padding:12px"></select><span class="muted">時</span>
+        <select id="slStartMin"  style="flex:1;width:auto;padding:12px"></select><span class="muted">分</span>
+      </div>
+
+      <label>起床（まだ寝ている扱いにするなら「起きていない」を押す）</label>
+      <input type="date" id="slEndDate">
+      <div class="hm" style="display:flex;align-items:center;gap:8px;margin-top:10px">
+        <select id="slEndHour" style="flex:1;width:auto;padding:12px"></select><span class="muted">時</span>
+        <select id="slEndMin"  style="flex:1;width:auto;padding:12px"></select><span class="muted">分</span>
+      </div>
+      <div class="chips" style="margin-top:10px">
+        <button type="button" class="chip" onclick="clearSleepEnd()">起きていない</button>
+      </div>
+      <div class="kpi" style="margin-top:14px"><span>睡眠時間</span><b id="slHours">—</b></div>
+    </div>
+    <button class="save" onclick="saveSleep()">保存する</button>
+    <button class="ghost" id="sleepDelete" style="display:none" onclick="deleteEntry('sleep')">この記録を削除</button>
+  </section>
+
+  <!-- ============ 分析 ============ -->
+  <section id="v-analysis" class="view">
+    <div class="card">
+      <div class="muted">
+        ここに出る数字は<strong>相関</strong>であって、原因と結果ではありません。
+        件数が少ないうちは偶然でも差が出ます。判断は必ず医師と行ってください。
+      </div>
+    </div>
+    <div class="card"><h2>睡眠時間 × 頭痛</h2><div id="anSleep"></div></div>
+    <div class="card"><h2>気圧の変化 × 頭痛</h2><div id="anPressure"></div></div>
+    <div class="card"><h2>食事タグ × おなかの調子</h2><div id="anFood"></div></div>
+    <div class="card"><h2>勤務日・ストレス</h2><div id="anWork"></div></div>
+    <div class="card"><h2>月ごとの服薬日数</h2><div id="anMeds"></div></div>
+  </section>
+
   <!-- ============ 履歴 ============ -->
   <section id="v-history" class="view">
     <div class="card">
@@ -358,6 +520,9 @@ details .inner{padding-bottom:14px}
       <button class="subbtn" style="margin-top:10px" onclick="exportCSV('stools')">記録のCSV</button>
       <button class="subbtn" style="margin-top:8px" onclick="exportCSV('meals')">食事記録のCSV</button>
       <button class="subbtn" style="margin-top:8px" onclick="exportCSV('daily')">日次記録のCSV</button>
+      <button class="subbtn" style="margin-top:8px" onclick="exportCSV('sleep')">睡眠のCSV</button>
+      <button class="subbtn" style="margin-top:8px" onclick="exportCSV('headaches')">頭痛のCSV</button>
+      <button class="subbtn" style="margin-top:8px" onclick="exportCSV('doses')">服薬のCSV</button>
     </div>
     <div class="card">
       <h2>バックアップ</h2>
@@ -389,10 +554,35 @@ details .inner{padding-bottom:14px}
       <button class="ghost" onclick="resetDict()">初期状態に戻す</button>
     </div>
     <div class="card">
+      <h2>薬の一覧</h2>
+      <div class="muted">ホーム画面のボタンになります。種類は「薬の使いすぎ」の判定に使うので、なるべく正しく選んでください。</div>
+      <div id="medEditor" style="margin-top:12px"></div>
+      <button class="subbtn" onclick="addMed()">薬を追加</button>
+      <button class="ghost" onclick="saveMeds()">薬の一覧を保存</button>
+    </div>
+    <div class="card">
+      <h2>気圧の取得</h2>
+      <div class="muted">
+        Open-Meteo（無料・登録不要）から、指定した地点の気圧を1時間ごとに取ってきます。
+        アプリを開いたときに自動で更新され、過去92日分もまとめて取り込みます。
+      </div>
+      <label>地点名</label>
+      <input type="text" id="geoLabel">
+      <label>緯度</label>
+      <input type="number" id="geoLat" step="0.0001" inputmode="decimal">
+      <label>経度</label>
+      <input type="number" id="geoLon" step="0.0001" inputmode="decimal">
+      <button class="subbtn" style="margin-top:12px" onclick="saveGeo()">地点を保存</button>
+      <button class="ghost" onclick="manualFetchPressure()">今すぐ取得する</button>
+      <div class="muted" id="pressureStatus" style="margin-top:10px"></div>
+    </div>
+    <div class="card">
       <h2>プライバシー</h2>
       <div class="muted">
-        記録はこの端末のブラウザ内（IndexedDB）にだけ保存されます。サーバーへの送信は一切ありません。
-        そのぶん、ブラウザのデータを消すと記録も消えます。定期的に「出力」からバックアップを取ってください。
+        記録はこの端末のブラウザ内（IndexedDB）にだけ保存されます。あなたの記録が外部へ送られることはありません。<br><br>
+        唯一の外部通信は気圧の取得です。天気サービスに送るのは<strong>地点の緯度・経度と期間だけ</strong>で、
+        体調や食事のデータは一切含みません。気圧が不要なら、上の「地点を保存」で緯度・経度を空にすれば通信しなくなります。<br><br>
+        ブラウザのデータを消すと記録も消えます。定期的に「出力」からバックアップを取ってください。
       </div>
     </div>
     <div class="card">
@@ -411,6 +601,8 @@ details .inner{padding-bottom:14px}
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 10l9-7 9 7v10a1 1 0 01-1 1h-5v-7H9v7H4a1 1 0 01-1-1z"/></svg>ホーム</button>
   <button id="nav-history" onclick="show('history')">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 5h16M4 12h16M4 19h16"/></svg>履歴</button>
+  <button id="nav-analysis" onclick="show('analysis')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>分析</button>
   <button id="nav-export" onclick="show('export')">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12M8 11l4 4 4-4M4 19h16"/></svg>出力</button>
   <button id="nav-settings" onclick="show('settings')">
@@ -444,6 +636,23 @@ const VOLUMES    = ["少","普通","多"];
 const PAIN_SITES = ["右下","へそ周囲","左下","全体","なし"];
 const MEAL_TYPES = ["朝","昼","夕","間食","飲み物"];
 const DAY_TYPES  = ["勤務","休日","出張","その他"];
+const HEAD_SIDES = ["左","右","両側","後頭部","わからない"];
+const TABLETS    = [0.5, 1, 1.5, 2, 3];
+const EFFECTS    = ["効かなかった","少し楽","楽になった","よく効いた"];
+
+/* 薬の種類。「薬の使いすぎによる頭痛」の目安が種類ごとに違うため分けている
+   triptan＝トリプタン系（ゾーミッグなど）：月10日以上が続くと注意
+   nsaid  ＝市販の鎮痛薬（イブなど）      ：月15日以上が続くと注意 */
+const MED_TYPES = {
+  triptan:{label:"トリプタン系（ゾーミッグ等）", limit:10},
+  nsaid  :{label:"鎮痛薬（イブ・ロキソニン等）", limit:15},
+  other  :{label:"その他（予防薬・吐き気止めなど）", limit:null}
+};
+const DEFAULT_MEDS = [
+  {id:"zomig", name:"ゾーミッグ", type:"triptan", def:1},
+  {id:"eve",   name:"イブ",       type:"nsaid",   def:1}
+];
+const DEFAULT_GEO = {label:"北九州市", lat:33.8834, lon:130.8751};
 
 const DEFAULT_DICT = {
   "乳製品":["牛乳","ミルク","ヨーグルト","チーズ","アイス","生クリーム","バター","ラテ","カフェオレ","グラタン","シチュー","プリン"],
@@ -462,7 +671,7 @@ const DEFAULT_DICT = {
 /* =========================================================
    2. データベース（IndexedDB）
    ========================================================= */
-const DB_NAME = "bowel-tracker", DB_VER = 1;
+const DB_NAME = "bowel-tracker", DB_VER = 2;
 let db = null;
 
 function openDB(){
@@ -470,10 +679,15 @@ function openDB(){
     const r = indexedDB.open(DB_NAME, DB_VER);
     r.onupgradeneeded = e => {
       const d = e.target.result;
-      if(!d.objectStoreNames.contains("stools")) d.createObjectStore("stools",{keyPath:"id"});
-      if(!d.objectStoreNames.contains("meals"))  d.createObjectStore("meals",{keyPath:"id"});
-      if(!d.objectStoreNames.contains("daily"))  d.createObjectStore("daily",{keyPath:"date"});
-      if(!d.objectStoreNames.contains("kv"))     d.createObjectStore("kv",{keyPath:"key"});
+      if(!d.objectStoreNames.contains("stools"))     d.createObjectStore("stools",{keyPath:"id"});
+      if(!d.objectStoreNames.contains("meals"))      d.createObjectStore("meals",{keyPath:"id"});
+      if(!d.objectStoreNames.contains("daily"))      d.createObjectStore("daily",{keyPath:"date"});
+      if(!d.objectStoreNames.contains("kv"))         d.createObjectStore("kv",{keyPath:"key"});
+      // v2 で追加
+      if(!d.objectStoreNames.contains("sleep"))      d.createObjectStore("sleep",{keyPath:"id"});
+      if(!d.objectStoreNames.contains("headaches"))  d.createObjectStore("headaches",{keyPath:"id"});
+      if(!d.objectStoreNames.contains("doses"))      d.createObjectStore("doses",{keyPath:"id"});
+      if(!d.objectStoreNames.contains("pressure"))   d.createObjectStore("pressure",{keyPath:"date"});
     };
     r.onsuccess = e => { db = e.target.result; res(); };
     r.onerror   = e => rej(e.target.error);
@@ -513,10 +727,14 @@ function dbGetAll(store){
    ========================================================= */
 const S = {
   stools: [], meals: [], daily: [],
-  dict: {}, templates: [],
+  sleep: [], headaches: [], doses: [], pressure: [],
+  dict: {}, templates: [], meds: [], geo: null,
   view: "home",
   stoolDraft: null,
   mealDraft: null,
+  headacheDraft: null,
+  doseDraft: null,
+  sleepDraft: null,
   editing: null      // {store, id}
 };
 
@@ -583,8 +801,9 @@ function shiftDt(kind, mins){
    5. 画面の切り替え
    ========================================================= */
 const TITLES = {home:"デイリーログ", stool:"記録する", meal:"食事を記録",
-  daily:"体調を記録", history:"履歴", export:"出力", settings:"設定"};
-const SUBVIEWS = ["stool","meal","daily"];
+  daily:"体調を記録", headache:"頭痛を記録", dose:"薬を記録", sleep:"睡眠を直す",
+  history:"履歴", analysis:"分析", export:"出力", settings:"設定"};
+const SUBVIEWS = ["stool","meal","daily","headache","dose","sleep"];
 
 function show(v){
   S.view = v;
@@ -598,7 +817,8 @@ function show(v){
   window.scrollTo(0,0);
   if(v === "home")     renderHome();
   if(v === "history")  renderHistory();
-  if(v === "settings") renderDict();
+  if(v === "analysis") renderAnalysis();
+  if(v === "settings"){ renderDict(); renderMedEditor(); renderGeo(); }
 }
 function goBack(){ S.editing = null; show("home"); }
 
@@ -888,6 +1108,342 @@ async function saveDaily(){
 }
 
 /* =========================================================
+   8b. 共通：日時入力・トースト
+   ========================================================= */
+function setDT(kind, iso){
+  fillTimeSelects(kind);
+  if(!iso){ $(kind + "Date").value = ""; return; }
+  const d = new Date(iso);
+  $(kind + "Date").value = dateKey(d);
+  $(kind + "Hour").value = d.getHours();
+  $(kind + "Min").value  = d.getMinutes();
+}
+function getDT(kind){
+  const dv = $(kind + "Date").value; if(!dv) return null;
+  const [y, mo, da] = dv.split("-").map(Number);
+  return new Date(y, mo - 1, da,
+    Number($(kind + "Hour").value || 0), Number($(kind + "Min").value || 0), 0, 0).toISOString();
+}
+let toastTimer = null;
+function toast(msg, actionLabel, actionFn){
+  const old = document.querySelector(".toast"); if(old) old.remove();
+  clearTimeout(toastTimer);
+  const el = document.createElement("div");
+  el.className = "toast";
+  el.appendChild(document.createTextNode(msg));
+  if(actionLabel){
+    const b = document.createElement("button");
+    b.textContent = actionLabel;
+    b.onclick = () => { el.remove(); actionFn(); };
+    el.appendChild(b);
+  }
+  document.body.appendChild(el);
+  toastTimer = setTimeout(() => el.remove(), 5000);
+}
+function fmtDur(ms){
+  const m = Math.round(ms / 60000);
+  const h = Math.floor(m / 60);
+  return h ? h + "時間" + (m % 60 ? (m % 60) + "分" : "") : m + "分";
+}
+
+/* =========================================================
+   8c. 睡眠（就寝／起床ボタン）
+   ========================================================= */
+function activeSleep(){ return S.sleep.find(s => !s.wakeAt) || null; }
+
+async function toggleSleep(){
+  const a = activeSleep();
+  if(a){
+    a.wakeAt = new Date().toISOString();
+    await dbPut("sleep", a);
+    S.sleep = await dbGetAll("sleep");
+    const h = (new Date(a.wakeAt) - new Date(a.sleepAt)) / 3600000;
+    toast("おはようございます。睡眠 " + h.toFixed(1) + " 時間", "直す", () => openSleep(a));
+  } else {
+    const rec = {id:uuid(), sleepAt:new Date().toISOString(), wakeAt:null, note:""};
+    await dbPut("sleep", rec);
+    S.sleep = await dbGetAll("sleep");
+    toast("就寝を記録しました", "直す", () => openSleep(rec));
+  }
+  renderHome();
+}
+
+// その日の「前夜の睡眠時間」。起床した日を基準にする
+function sleepHoursFor(k){
+  const recs = S.sleep.filter(s => s.wakeAt && dateKey(new Date(s.wakeAt)) === k);
+  if(recs.length){
+    const ms = recs.reduce((sum, s) => sum + (new Date(s.wakeAt) - new Date(s.sleepAt)), 0);
+    return ms / 3600000;
+  }
+  const d = S.daily.find(x => x.date === k);   // 手入力があればそちら
+  return (d && d.sleepHours != null) ? d.sleepHours : null;
+}
+
+function openSleep(rec){
+  if(!rec){
+    rec = [...S.sleep].sort((a,b) => b.sleepAt.localeCompare(a.sleepAt))[0]
+       || {id:uuid(), sleepAt:new Date().toISOString(), wakeAt:null, note:""};
+  }
+  S.editing = S.sleep.some(s => s.id === rec.id) ? {store:"sleep", id:rec.id} : null;
+  S.sleepDraft = JSON.parse(JSON.stringify(rec));
+  $("sleepDelete").style.display = S.editing ? "" : "none";
+  setDT("slStart", S.sleepDraft.sleepAt);
+  setDT("slEnd",   S.sleepDraft.wakeAt);
+  ["slStartDate","slStartHour","slStartMin","slEndDate","slEndHour","slEndMin"]
+    .forEach(id => $(id).onchange = updateSleepHours);
+  updateSleepHours();
+  show("sleep");
+}
+function clearSleepEnd(){ $("slEndDate").value = ""; updateSleepHours(); }
+function updateSleepHours(){
+  const a = getDT("slStart"), b = getDT("slEnd");
+  $("slHours").textContent = (a && b && new Date(b) > new Date(a))
+    ? ((new Date(b) - new Date(a)) / 3600000).toFixed(1) + " 時間" : "—";
+}
+async function saveSleep(){
+  const a = getDT("slStart"), b = getDT("slEnd");
+  if(!a){ alert("就寝の日時を入れてください。"); return; }
+  if(b && new Date(b) <= new Date(a)){ alert("起床が就寝より前になっています。"); return; }
+  const rec = S.sleepDraft;
+  rec.sleepAt = a; rec.wakeAt = b;
+  await dbPut("sleep", rec);
+  S.sleep = await dbGetAll("sleep");
+  S.editing = null;
+  goBack();
+}
+
+/* =========================================================
+   8d. 頭痛
+   ========================================================= */
+function activeHeadache(){ return S.headaches.find(h => !h.endAt) || null; }
+
+function headacheMain(){
+  const a = activeHeadache();
+  openHeadache(a || null);
+}
+function openHeadache(rec){
+  S.editing = rec ? {store:"headaches", id:rec.id} : null;
+  S.headacheDraft = rec ? JSON.parse(JSON.stringify(rec))
+    : {id:uuid(), startAt:new Date().toISOString(), endAt:null, severity:null, side:null,
+       throbbing:false, photophobia:false, phonophobia:false, nausea:false, aura:false, note:""};
+  const d = S.headacheDraft;
+  $("headacheDelete").style.display = rec ? "" : "none";
+  setDT("hStart", d.startAt);
+  setDT("hEnd",   d.endAt);
+  $("h_throb").checked  = !!d.throbbing;
+  $("h_photo").checked  = !!d.photophobia;
+  $("h_phono").checked  = !!d.phonophobia;
+  $("h_nausea").checked = !!d.nausea;
+  $("h_aura").checked   = !!d.aura;
+  $("h_note").value     = d.note || "";
+  renderHeadacheChips();
+  show("headache");
+}
+function renderHeadacheChips(){
+  const d = S.headacheDraft;
+  makeChips("hSeverity", [0,1,2,3,4,5,6,7,8,9,10], d.severity, v => { d.severity = v; renderHeadacheChips(); });
+  makeChips("hSide",     HEAD_SIDES,               d.side,     v => { d.side = v;     renderHeadacheChips(); });
+}
+function endHeadacheNow(){ setDT("hEnd", new Date().toISOString()); }
+function clearHeadacheEnd(){ $("hEndDate").value = ""; }
+async function saveHeadache(){
+  const d = S.headacheDraft;
+  if(d.severity === null || d.severity === undefined){ alert("痛みの強さを選んでください。"); return; }
+  const st = getDT("hStart"); if(!st){ alert("始まった日時を入れてください。"); return; }
+  const en = getDT("hEnd");
+  if(en && new Date(en) <= new Date(st)){ alert("おさまった時刻が始まりより前になっています。"); return; }
+  d.startAt = st; d.endAt = en;
+  d.throbbing   = $("h_throb").checked;
+  d.photophobia = $("h_photo").checked;
+  d.phonophobia = $("h_phono").checked;
+  d.nausea      = $("h_nausea").checked;
+  d.aura        = $("h_aura").checked;
+  d.note        = $("h_note").value.trim();
+  await dbPut("headaches", d);
+  S.headaches = await dbGetAll("headaches");
+  S.editing = null;
+  goBack();
+}
+
+/* =========================================================
+   8e. 服薬
+   ========================================================= */
+async function quickDose(medId){
+  const m = S.meds.find(x => x.id === medId); if(!m) return;
+  const rec = {id:uuid(), datetime:new Date().toISOString(), medId:m.id, medName:m.name,
+    type:m.type, tablets:m.def || 1, effect:null, note:""};
+  await dbPut("doses", rec);
+  S.doses = await dbGetAll("doses");
+  renderHome();
+  toast(m.name + " " + rec.tablets + "錠 を記録", "直す", () => openDose(rec));
+}
+function openDose(rec){
+  S.editing = rec ? {store:"doses", id:rec.id} : null;
+  S.doseDraft = rec ? JSON.parse(JSON.stringify(rec))
+    : {id:uuid(), datetime:new Date().toISOString(),
+       medId:(S.meds[0]||{}).id, medName:(S.meds[0]||{}).name, type:(S.meds[0]||{}).type,
+       tablets:1, effect:null, note:""};
+  $("doseDelete").style.display = rec ? "" : "none";
+  setDT("dose", S.doseDraft.datetime);
+  $("dose_note").value = S.doseDraft.note || "";
+  renderDoseChips();
+  show("dose");
+}
+function renderDoseChips(){
+  const d = S.doseDraft;
+  makeChips("doseMedChips", S.meds.map(m => m.id), d.medId, v => {
+    if(!v) return;
+    const m = S.meds.find(x => x.id === v);
+    d.medId = m.id; d.medName = m.name; d.type = m.type;
+    renderDoseChips();
+  }, id => (S.meds.find(m => m.id === id) || {}).name || id);
+  makeChips("doseTablets", TABLETS, d.tablets, v => { if(v !== null) d.tablets = Number(v); renderDoseChips(); },
+    v => v + "錠");
+  makeChips("doseEffect", [0,1,2,3], d.effect, v => { d.effect = v; renderDoseChips(); }, v => EFFECTS[v]);
+}
+async function saveDose(){
+  const d = S.doseDraft;
+  if(!d.medId){ alert("薬を選んでください。"); return; }
+  const dt = getDT("dose"); if(!dt){ alert("日時を入れてください。"); return; }
+  d.datetime = dt;
+  d.note = $("dose_note").value.trim();
+  await dbPut("doses", d);
+  S.doses = await dbGetAll("doses");
+  S.editing = null;
+  goBack();
+}
+// 直近30日の、種類ごとの「服用した日数」
+function medDaysByType(days){
+  const since = daysAgo(days);
+  const out = {};
+  Object.keys(MED_TYPES).forEach(t => out[t] = new Set());
+  S.doses.filter(d => new Date(d.datetime) >= since).forEach(d => {
+    const t = d.type || (S.meds.find(m => m.id === d.medId) || {}).type || "other";
+    if(out[t]) out[t].add(dateKey(new Date(d.datetime)));
+  });
+  const r = {};
+  Object.keys(out).forEach(t => r[t] = out[t].size);
+  return r;
+}
+
+/* =========================================================
+   8f. 気圧（Open-Meteo／無料・登録不要）
+   ========================================================= */
+function pressureHours(k){
+  const r = S.pressure.find(p => p.date === k);
+  return r ? r.hours : null;
+}
+function pressureDayAvg(k){
+  const h = pressureHours(k); if(!h) return null;
+  const v = h.filter(x => x != null && !isNaN(x));
+  return v.length ? v.reduce((a,b) => a+b, 0) / v.length : null;
+}
+// 前日平均からの変化量（マイナス＝下がった）
+function pressureDelta(k){
+  const d = new Date(k + "T12:00:00");
+  const prev = new Date(d); prev.setDate(prev.getDate() - 1);
+  const a = pressureDayAvg(k), b = pressureDayAvg(dateKey(prev));
+  return (a == null || b == null) ? null : a - b;
+}
+async function fetchPressure(force){
+  const g = S.geo;
+  if(!g || g.lat == null || g.lon == null || g.lat === "" || g.lon === "")
+    throw new Error("地点が設定されていません");
+  const kv = await dbGetAll("kv");
+  const last = (kv.find(x => x.key === "pressureFetchedAt") || {}).value;
+  if(!force && last && (Date.now() - new Date(last)) < 6 * 3600 * 1000) return "skip";
+
+  const url = "https://api.open-meteo.com/v1/forecast"
+    + "?latitude=" + encodeURIComponent(g.lat)
+    + "&longitude=" + encodeURIComponent(g.lon)
+    + "&hourly=pressure_msl&timezone=Asia%2FTokyo&past_days=92&forecast_days=2";
+  const res = await fetch(url);
+  if(!res.ok) throw new Error("通信エラー（" + res.status + "）");
+  const j = await res.json();
+  if(!j.hourly || !Array.isArray(j.hourly.time) || !Array.isArray(j.hourly.pressure_msl))
+    throw new Error("受け取ったデータの形が想定と違います");
+
+  const map = {};
+  j.hourly.time.forEach((t, i) => {
+    const k = t.slice(0, 10), h = Number(t.slice(11, 13));
+    if(!map[k]) map[k] = new Array(24).fill(null);
+    map[k][h] = j.hourly.pressure_msl[i];
+  });
+  for(const k of Object.keys(map)) await dbPut("pressure", {date:k, hours:map[k]});
+  await dbPut("kv", {key:"pressureFetchedAt", value:new Date().toISOString()});
+  S.pressure = await dbGetAll("pressure");
+  return Object.keys(map).length + "日分";
+}
+async function manualFetchPressure(){
+  $("pressureStatus").textContent = "取得中…";
+  try{
+    const n = await fetchPressure(true);
+    $("pressureStatus").textContent = "取得しました（" + n + "）";
+    renderHome();
+  }catch(e){
+    $("pressureStatus").textContent = "取得できませんでした：" + (e.message || e);
+  }
+}
+function renderGeo(){
+  $("geoLabel").value = S.geo.label ?? "";
+  $("geoLat").value   = S.geo.lat ?? "";
+  $("geoLon").value   = S.geo.lon ?? "";
+}
+async function saveGeo(){
+  S.geo = {
+    label: $("geoLabel").value.trim() || "指定地点",
+    lat:   $("geoLat").value === "" ? null : Number($("geoLat").value),
+    lon:   $("geoLon").value === "" ? null : Number($("geoLon").value)
+  };
+  await dbPut("kv", {key:"geo", value:S.geo});
+  alert("保存しました。");
+}
+
+/* =========================================================
+   8g. 薬の一覧の編集
+   ========================================================= */
+function renderMedEditor(){
+  const el = $("medEditor"); el.innerHTML = "";
+  S.meds.forEach((m, i) => {
+    const box = document.createElement("div");
+    box.style.cssText = "border:1px solid var(--line);border-radius:10px;padding:10px;margin-bottom:10px";
+    const nm = document.createElement("input");
+    nm.type = "text"; nm.value = m.name; nm.dataset.i = i; nm.className = "medName";
+    const sel = document.createElement("select");
+    sel.dataset.i = i; sel.className = "medType"; sel.style.marginTop = "8px";
+    Object.keys(MED_TYPES).forEach(t => {
+      const o = new Option(MED_TYPES[t].label, t);
+      if(m.type === t) o.selected = true;
+      sel.add(o);
+    });
+    const del = document.createElement("button");
+    del.className = "ghost"; del.textContent = "この薬を削除"; del.style.marginTop = "8px";
+    del.onclick = async () => {
+      if(!confirm(m.name + " を一覧から消します。記録済みの服薬は残ります。")) return;
+      S.meds.splice(i, 1);
+      await dbPut("kv", {key:"meds", value:S.meds});
+      renderMedEditor();
+    };
+    box.appendChild(nm); box.appendChild(sel); box.appendChild(del);
+    el.appendChild(box);
+  });
+}
+function addMed(){
+  const name = prompt("薬の名前", "");
+  if(!name) return;
+  S.meds.push({id:uuid(), name:name.trim(), type:"other", def:1});
+  renderMedEditor();
+}
+async function saveMeds(){
+  document.querySelectorAll(".medName").forEach(i => S.meds[i.dataset.i].name = i.value.trim());
+  document.querySelectorAll(".medType").forEach(i => S.meds[i.dataset.i].type = i.value);
+  S.meds = S.meds.filter(m => m.name);
+  await dbPut("kv", {key:"meds", value:S.meds});
+  renderMedEditor();
+  alert("保存しました。");
+}
+
+/* =========================================================
    9. ホーム
    ========================================================= */
 function renderHome(){
@@ -908,7 +1464,92 @@ function renderHome(){
     + '<div class="bar" style="height:'+Math.round(d.n / max * 74)+'%"></div>'
     + '<span class="cap">'+d.label+'</span></div>').join("");
 
+  renderSleepCard();
+  renderHeadacheCard();
+  renderPressureCard();
   renderAlerts();
+}
+function renderSleepCard(){
+  const a = activeSleep();
+  const btn = $("sleepToggle");
+  if(a){
+    btn.textContent = "☀ 起床";
+    btn.classList.add("awake");
+    $("sleepInfo").textContent = fmtDT(a.sleepAt) + " から " + fmtDur(Date.now() - new Date(a.sleepAt));
+  } else {
+    btn.textContent = "🌙 就寝";
+    btn.classList.remove("awake");
+    const last = S.sleep.filter(s => s.wakeAt).sort((x,y) => y.wakeAt.localeCompare(x.wakeAt))[0];
+    $("sleepInfo").textContent = last
+      ? "前回：" + ((new Date(last.wakeAt) - new Date(last.sleepAt)) / 3600000).toFixed(1) + " 時間"
+      : "寝る前に押してください";
+  }
+}
+function renderHeadacheCard(){
+  const a = activeHeadache();
+  const btn = $("headacheBtn");
+  if(a){
+    btn.textContent = "頭痛が続いています（" + fmtDur(Date.now() - new Date(a.startAt)) + "）▸";
+    btn.style.borderColor = "#b3261e";
+    btn.style.color = "#b3261e";
+  } else {
+    btn.textContent = "頭痛を記録する";
+    btn.style.borderColor = "";
+    btn.style.color = "";
+  }
+  // 薬のボタン
+  const mb = $("medBtns"); mb.innerHTML = "";
+  S.meds.forEach(m => {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "qbtn";
+    b.textContent = m.name;
+    b.onclick = () => quickDose(m.id);
+    mb.appendChild(b);
+  });
+  const today = dateKey(new Date());
+  const td = S.doses.filter(d => dateKey(new Date(d.datetime)) === today);
+  const md = medDaysByType(30);
+  const bits = [];
+  if(td.length) bits.push("今日 " + td.map(d => d.medName + d.tablets + "錠").join("・"));
+  bits.push("直近30日の服用日数：トリプタン " + md.triptan + "日／鎮痛薬 " + md.nsaid + "日");
+  $("medInfo").innerHTML = esc(bits.join("　/　"));
+}
+function renderPressureCard(){
+  $("pressureTitle").textContent = "気圧（" + (S.geo.label || "") + "）";
+  const now = new Date(), k = dateKey(now);
+  const hrs = pressureHours(k);
+  if(!hrs){
+    $("pressureNow").textContent = "気圧のデータがありません（設定から取得できます）";
+    $("chartP").innerHTML = "";
+    return;
+  }
+  const cur = hrs[now.getHours()];
+  const prev = new Date(now); prev.setDate(prev.getDate() - 1);
+  const ph = pressureHours(dateKey(prev));
+  const before = ph ? ph[now.getHours()] : null;
+  let txt = cur != null ? "いま " + cur.toFixed(1) + " hPa" : "いまの値は未取得";
+  if(cur != null && before != null){
+    const d = cur - before;
+    txt += "　24時間で " + (d >= 0 ? "+" : "") + d.toFixed(1) + " hPa"
+        + (d <= -6 ? "（大きく低下）" : "");
+  }
+  $("pressureNow").textContent = txt;
+
+  // 直近7日の平均気圧
+  const days = [];
+  for(let i = 6; i >= 0; i--){
+    const d = daysAgo(i), kk = dateKey(d);
+    days.push({label:(d.getMonth()+1)+"/"+d.getDate(), v:pressureDayAvg(kk)});
+  }
+  const vals = days.map(d => d.v).filter(v => v != null);
+  if(!vals.length){ $("chartP").innerHTML = ""; return; }
+  const lo = Math.min(...vals) - 2, hi = Math.max(...vals) + 2;
+  $("chartP").innerHTML = days.map(d => {
+    const h = d.v == null ? 0 : Math.round((d.v - lo) / (hi - lo) * 74);
+    return '<div class="col"><span class="val">' + (d.v == null ? "" : Math.round(d.v)) + '</span>'
+      + '<div class="bar" style="height:' + h + '%;background:#6b8fb5"></div>'
+      + '<span class="cap">' + d.label + '</span></div>';
+  }).join("");
 }
 function checkAlerts(){
   const out = [];
@@ -942,6 +1583,23 @@ function checkAlerts(){
   if(S.daily.some(d => new Date(d.date) >= week && fever.test(d.note || "")))
     out.push("発熱の記録があります。");
 
+  // 薬の使いすぎ（薬物乱用頭痛）の目安
+  const md = medDaysByType(30);
+  Object.keys(MED_TYPES).forEach(t => {
+    const lim = MED_TYPES[t].limit;
+    if(lim && md[t] >= lim)
+      out.push("直近1か月で" + MED_TYPES[t].label + "の服用が" + md[t] + "日あります。"
+        + "この状態が3か月ほど続くと、薬そのものが頭痛を起こすことがあります（薬の使いすぎによる頭痛）。"
+        + "自己判断で急にやめず、医師にご相談ください。");
+  });
+
+  // 強い頭痛
+  const bigHead = S.headaches.filter(h => new Date(h.startAt) >= week && h.severity >= 9);
+  if(bigHead.length) out.push("この1週間に、強さ9以上の頭痛が" + bigHead.length + "回ありました。");
+  const longHead = S.headaches.filter(h => h.endAt && new Date(h.startAt) >= since
+    && (new Date(h.endAt) - new Date(h.startAt)) > 72 * 3600000);
+  if(longHead.length) out.push("72時間以上続いた頭痛が" + longHead.length + "回あります。");
+
   return out;
 }
 function renderAlerts(){
@@ -960,8 +1618,11 @@ function renderAlerts(){
 function renderHistory(){
   const jump = $("jumpDate").value;
   let items = [
-    ...S.stools.map(s => ({kind:"stool", dt:s.datetime, rec:s})),
-    ...S.meals.map(m  => ({kind:"meal",  dt:m.datetime, rec:m}))
+    ...S.stools.map(s    => ({kind:"stool",    dt:s.datetime, rec:s})),
+    ...S.meals.map(m     => ({kind:"meal",     dt:m.datetime, rec:m})),
+    ...S.headaches.map(h => ({kind:"headache", dt:h.startAt,  rec:h})),
+    ...S.doses.map(d     => ({kind:"dose",     dt:d.datetime, rec:d})),
+    ...S.sleep.map(s     => ({kind:"sleep",    dt:s.wakeAt || s.sleepAt, rec:s}))
   ];
   if(jump) items = items.filter(x => dateKey(new Date(x.dt)) === jump);
   items.sort((a,b) => b.dt.localeCompare(a.dt));
@@ -992,6 +1653,38 @@ function renderHistory(){
 }
 function entryHTML(x){
   const r = x.rec;
+  if(x.kind === "headache"){
+    const dur = r.endAt ? fmtDur(new Date(r.endAt) - new Date(r.startAt)) : "継続中";
+    const badges = [];
+    if(r.side)        badges.push('<span class="badge">' + esc(r.side) + "</span>");
+    if(r.aura)        badges.push('<span class="badge">前兆</span>');
+    if(r.throbbing)   badges.push('<span class="badge">拍動性</span>');
+    if(r.photophobia) badges.push('<span class="badge">光がつらい</span>');
+    if(r.phonophobia) badges.push('<span class="badge">音がつらい</span>');
+    if(r.nausea)      badges.push('<span class="badge">吐き気</span>');
+    return '<div class="entry"><span class="t">' + fmtTime(r.startAt) + "</span>"
+      + '<span class="dot" style="background:#b3261e"></span>'
+      + '<div class="body"><div class="ttl">頭痛　強さ ' + r.severity + "　" + esc(dur) + "</div>"
+      + '<div class="meta">' + badges.join("") + (r.note ? "<br>" + esc(r.note) : "") + "</div></div>"
+      + '<div class="acts"><button onclick="editRec(\'headaches\',\'' + r.id + '\')">編集</button></div></div>';
+  }
+  if(x.kind === "dose"){
+    const eff = (r.effect === null || r.effect === undefined) ? "" :
+      '<span class="badge">' + esc(EFFECTS[r.effect]) + "</span>";
+    return '<div class="entry"><span class="t">' + fmtTime(r.datetime) + "</span>"
+      + '<span class="dot" style="background:#7a5ea8"></span>'
+      + '<div class="body"><div class="ttl">' + esc(r.medName) + "　" + r.tablets + "錠</div>"
+      + '<div class="meta">' + eff + (r.note ? "<br>" + esc(r.note) : "") + "</div></div>"
+      + '<div class="acts"><button onclick="editRec(\'doses\',\'' + r.id + '\')">編集</button></div></div>';
+  }
+  if(x.kind === "sleep"){
+    const h = r.wakeAt ? ((new Date(r.wakeAt) - new Date(r.sleepAt)) / 3600000).toFixed(1) + " 時間" : "就寝中";
+    return '<div class="entry"><span class="t">' + fmtTime(r.wakeAt || r.sleepAt) + "</span>"
+      + '<span class="dot" style="background:#4a4f7a"></span>'
+      + '<div class="body"><div class="ttl">睡眠　' + h + "</div>"
+      + '<div class="meta">' + fmtDT(r.sleepAt) + " 〜 " + (r.wakeAt ? fmtDT(r.wakeAt) : "") + "</div></div>"
+      + '<div class="acts"><button onclick="editRec(\'sleep\',\'' + r.id + '\')">編集</button></div></div>';
+  }
   if(x.kind === "stool"){
     const c = COLORS.find(z => z.id === r.color);
     const b = BRISTOL.find(z => z.n === r.bristol) || {d:""};
@@ -1022,19 +1715,232 @@ function entryHTML(x){
       + '<div class="acts"><button onclick="editRec(\'meals\',\'' + r.id + '\')">編集</button></div></div>';
   }
 }
+const STORE_LIST = {stools:"stools", meals:"meals", headaches:"headaches", doses:"doses", sleep:"sleep"};
 function editRec(store, id){
-  const rec = (store === "stools" ? S.stools : S.meals).find(r => r.id === id);
+  const arr = {stools:S.stools, meals:S.meals, headaches:S.headaches, doses:S.doses, sleep:S.sleep}[store];
+  const rec = (arr || []).find(r => r.id === id);
   if(!rec) return;
-  store === "stools" ? openStool(rec) : openMeal(rec);
+  ({stools:openStool, meals:openMeal, headaches:openHeadache, doses:openDose, sleep:openSleep})[store](rec);
 }
 async function deleteEntry(store){
   if(!S.editing) return;
   if(!confirm("この記録を削除します。よろしいですか？")) return;
   await dbDelete(store, S.editing.id);
-  S.stools = await dbGetAll("stools");
-  S.meals  = await dbGetAll("meals");
+  for(const k of Object.keys(STORE_LIST)) S[k === "stools" ? "stools" : k] = await dbGetAll(k);
   S.editing = null;
   goBack();
+}
+
+/* =========================================================
+   10b. 分析
+   ========================================================= */
+const MIN_N = 3;   // これ未満の件数は「データ不足」として出さない
+
+function allDates(){
+  const times = [
+    ...S.stools.map(s => s.datetime), ...S.meals.map(m => m.datetime),
+    ...S.headaches.map(h => h.startAt), ...S.doses.map(d => d.datetime),
+    ...S.sleep.map(s => s.sleepAt), ...S.daily.map(d => d.date + "T12:00:00")
+  ].sort();
+  if(!times.length) return [];
+  const start = new Date(times[0]); start.setHours(0,0,0,0);
+  const end = new Date(); end.setHours(0,0,0,0);
+  const out = [];
+  for(let d = new Date(start); d <= end && out.length < 800; d.setDate(d.getDate() + 1))
+    out.push(dateKey(d));
+  return out;
+}
+function headacheDays(){
+  return new Set(S.headaches.map(h => dateKey(new Date(h.startAt))));
+}
+function pctRow(label, num, den, green){
+  if(!den) return '<div class="barrow"><span class="lb">' + esc(label)
+    + '</span><span class="tr"></span><span class="vl">—</span></div>';
+  const p = num / den * 100;
+  return '<div class="barrow"><span class="lb">' + esc(label) + "<br><span style=\"font-size:.9em\">("
+    + num + "/" + den + "日)</span></span>"
+    + '<span class="tr"><span class="fl' + (green ? " g" : "") + '" style="width:'
+    + Math.max(2, Math.round(p)) + '%"></span></span>'
+    + '<span class="vl">' + p.toFixed(0) + "%</span></div>";
+}
+const DISCLAIM = '<div class="note">※ 割合の差は「関係がありそう」という手がかりにすぎません。'
+  + '日数が少ないうちは偶然でも差が出ます。</div>';
+
+function renderAnalysis(){
+  $("anSleep").innerHTML    = anSleep();
+  $("anPressure").innerHTML = anPressure();
+  $("anFood").innerHTML     = anFood();
+  $("anWork").innerHTML     = anWork();
+  $("anMeds").innerHTML     = anMeds();
+}
+
+/* --- 睡眠時間 × 頭痛 --- */
+function anSleep(){
+  const hd = headacheDays();
+  const bk = [
+    {lb:"5時間未満",   t:h => h < 5},
+    {lb:"5〜6時間",    t:h => h >= 5 && h < 6},
+    {lb:"6〜7時間",    t:h => h >= 6 && h < 7},
+    {lb:"7〜8時間",    t:h => h >= 7 && h < 8},
+    {lb:"8〜9時間",    t:h => h >= 8 && h < 9},
+    {lb:"9時間以上",   t:h => h >= 9}
+  ].map(b => ({...b, n:0, k:0}));
+  allDates().forEach(k => {
+    const h = sleepHoursFor(k); if(h == null) return;
+    const b = bk.find(x => x.t(h)); if(!b) return;
+    b.n++; if(hd.has(k)) b.k++;
+  });
+  const total = bk.reduce((s,b) => s + b.n, 0);
+  if(total < MIN_N) return '<div class="nodata">睡眠の記録がまだ足りません。'
+    + '寝る前に「就寝」、起きたら「起床」を押していくと、ここに出てきます。</div>';
+  const shown = bk.filter(b => b.n > 0);
+  return shown.map(b => b.n >= MIN_N
+      ? pctRow(b.lb, b.k, b.n)
+      : '<div class="barrow"><span class="lb">' + b.lb + "<br><span style=\"font-size:.9em\">("
+        + b.n + "日)</span></span><span class=\"tr\"></span><span class=\"vl\">データ不足</span></div>"
+    ).join("")
+    + '<div class="note">前の晩の睡眠時間ごとに、その日に頭痛が始まった割合です（記録全期間 '
+    + total + " 日分）。</div>" + DISCLAIM;
+}
+
+/* --- 気圧の変化 × 頭痛 --- */
+function anPressure(){
+  if(!S.pressure.length) return '<div class="nodata">気圧のデータがありません。'
+    + '設定タブの「今すぐ取得する」を押すと、過去92日分をまとめて取り込めます。</div>';
+  const hd = headacheDays();
+  const bk = [
+    {lb:"−6 hPa以下（急降下）", t:d => d <= -6},
+    {lb:"−6 〜 −3 hPa",        t:d => d > -6 && d <= -3},
+    {lb:"−3 〜 +3 hPa（横ばい）", t:d => d > -3 && d < 3},
+    {lb:"+3 〜 +6 hPa",        t:d => d >= 3 && d < 6},
+    {lb:"+6 hPa以上",          t:d => d >= 6}
+  ].map(b => ({...b, n:0, k:0}));
+  let cover = 0;
+  allDates().forEach(k => {
+    const d = pressureDelta(k); if(d == null) return;
+    cover++;
+    const b = bk.find(x => x.t(d)); if(!b) return;
+    b.n++; if(hd.has(k)) b.k++;
+  });
+  if(cover < MIN_N) return '<div class="nodata">重なっている日数がまだ足りません。</div>';
+  const shown = bk.filter(b => b.n > 0);
+  return shown.map(b => b.n >= MIN_N
+      ? pctRow(b.lb, b.k, b.n)
+      : '<div class="barrow"><span class="lb">' + b.lb + "<br><span style=\"font-size:.9em\">("
+        + b.n + "日)</span></span><span class=\"tr\"></span><span class=\"vl\">データ不足</span></div>"
+    ).join("")
+    + '<div class="note">前日との平均気圧の差ごとに、その日に頭痛が始まった割合です（'
+    + cover + " 日分）。気圧は北九州市の観測点ではなく、指定した緯度経度の推定値です。</div>" + DISCLAIM;
+}
+
+/* --- 食事タグ × おなかの調子 --- */
+function looseAfter(base){   // base の 6〜24時間後に タイプ6以上 があったか
+  const a = base.getTime() + 6 * 3600000, b = base.getTime() + 24 * 3600000;
+  return S.stools.some(s => s.bristol >= 6
+    && new Date(s.datetime).getTime() >= a && new Date(s.datetime).getTime() <= b);
+}
+function anFood(){
+  const mealDays = new Set(S.meals.map(m => dateKey(new Date(m.datetime))));
+  if(mealDays.size < MIN_N) return '<div class="nodata">食事の記録がまだ足りません。</div>';
+
+  const rows = Object.keys(S.dict).map(tag => {
+    const ex = S.meals.filter(m => (m.tags || []).includes(tag));
+    const exDays = new Set(ex.map(m => dateKey(new Date(m.datetime))));
+    let exHit = 0;
+    exDays.forEach(k => {
+      const first = ex.filter(m => dateKey(new Date(m.datetime)) === k)
+        .sort((a,b) => a.datetime.localeCompare(b.datetime))[0];
+      if(looseAfter(new Date(first.datetime))) exHit++;
+    });
+    const nonDays = [...mealDays].filter(k => !exDays.has(k));
+    let nonHit = 0;
+    nonDays.forEach(k => { if(looseAfter(new Date(k + "T12:00:00"))) nonHit++; });
+    const exP  = exDays.size ? exHit / exDays.size * 100 : null;
+    const nonP = nonDays.length ? nonHit / nonDays.length * 100 : null;
+    return {tag, exN:exDays.size, exHit, exP, nonN:nonDays.length, nonHit, nonP,
+      diff:(exP != null && nonP != null) ? exP - nonP : -999};
+  }).filter(r => r.exN >= MIN_N).sort((a,b) => b.diff - a.diff);
+
+  if(!rows.length) return '<div class="nodata">まだどのタグも日数が足りません（各3日以上必要）。</div>';
+
+  return rows.map(r =>
+    '<div style="margin-bottom:12px">'
+    + pctRow(r.tag + "を食べた日", r.exHit, r.exN)
+    + pctRow("食べなかった日", r.nonHit, r.nonN, true)
+    + "</div>").join("")
+    + '<div class="note">その日の最初の「そのタグを含む食事」から6〜24時間のあいだに、'
+    + 'タイプ6以上（泥状・水様）が出た割合です。上のほど差が大きい順に並んでいます。</div>' + DISCLAIM;
+}
+
+/* --- 勤務日・ストレス --- */
+function anWork(){
+  const hd = headacheDays();
+  const byType = {};
+  DAY_TYPES.forEach(t => byType[t] = {n:0, stool:0, head:0});
+  S.daily.forEach(d => {
+    if(!d.dayType || !byType[d.dayType]) return;
+    const b = byType[d.dayType];
+    b.n++;
+    b.stool += S.stools.filter(s => dateKey(new Date(s.datetime)) === d.date).length;
+    if(hd.has(d.date)) b.head++;
+  });
+  const shown = DAY_TYPES.filter(t => byType[t].n >= MIN_N);
+  let html = "";
+  if(shown.length){
+    html += '<div class="cmp">' + shown.map(t =>
+      '<div><div class="v">' + (byType[t].stool / byType[t].n).toFixed(1) + "</div>"
+      + '<div class="c">' + esc(t) + "の1日あたり回数<br>（" + byType[t].n + "日）</div></div>").join("")
+      + "</div>";
+    html += '<div style="margin-top:14px">' + shown.map(t =>
+      pctRow(t + "の日に頭痛", byType[t].head, byType[t].n)).join("") + "</div>";
+  } else {
+    html += '<div class="nodata">「この日の区分」を入れた日がまだ足りません（体調の記録から入れられます）。</div>';
+  }
+
+  const st = [0,1,2,3,4,5].map(v => ({v, n:0, k:0}));
+  S.daily.forEach(d => {
+    if(d.stress == null) return;
+    const b = st.find(x => x.v === Number(d.stress)); if(!b) return;
+    b.n++; if(hd.has(d.date)) b.k++;
+  });
+  const stShown = st.filter(b => b.n >= MIN_N);
+  if(stShown.length){
+    html += '<h3 style="margin-top:18px;font-size:.9rem">ストレスの強さ別の頭痛</h3>'
+      + stShown.map(b => pctRow("ストレス " + b.v, b.k, b.n)).join("");
+  }
+  return html + DISCLAIM;
+}
+
+/* --- 月ごとの服薬日数 --- */
+function anMeds(){
+  if(!S.doses.length) return '<div class="nodata">服薬の記録がまだありません。</div>';
+  const months = {};
+  S.doses.forEach(d => {
+    const m = d.datetime.slice(0, 7);
+    const t = d.type || (S.meds.find(x => x.id === d.medId) || {}).type || "other";
+    if(!months[m]) months[m] = {};
+    if(!months[m][t]) months[m][t] = new Set();
+    months[m][t].add(dateKey(new Date(d.datetime)));
+  });
+  const keys = Object.keys(months).sort().reverse().slice(0, 6);
+  let html = keys.map(m => {
+    const parts = Object.keys(MED_TYPES).map(t => {
+      const n = months[m][t] ? months[m][t].size : 0;
+      if(!n) return "";
+      const lim = MED_TYPES[t].limit;
+      const over = lim && n >= lim;
+      return '<div class="barrow"><span class="lb">' + esc(MED_TYPES[t].label) + "</span>"
+        + '<span class="tr"><span class="fl" style="width:' + Math.min(100, n / 20 * 100)
+        + "%;background:" + (over ? "#b3261e" : "#7a5ea8") + '"></span></span>'
+        + '<span class="vl">' + n + "日</span></div>";
+    }).join("");
+    return '<div style="margin-bottom:14px"><div style="font-weight:700;font-size:.85rem;margin-bottom:6px">'
+      + m.replace("-", "年") + "月</div>" + parts + "</div>";
+  }).join("");
+  html += '<div class="note">目安：トリプタン系は月10日以上、鎮痛薬は月15日以上が3か月ほど続くと、'
+    + '薬そのものが頭痛の原因になることがあります（薬の使いすぎによる頭痛）。'
+    + '当てはまっても自己判断で急にやめず、医師にご相談ください。</div>';
+  return html;
 }
 
 /* =========================================================
@@ -1049,7 +1955,11 @@ function toCSV(rows, headers){
   return [headers.join(","), ...rows.map(r => headers.map(h => q(r[h])).join(","))].join("\r\n");
 }
 function download(name, text, type){
-  const blob = new Blob(["﻿" + text], {type:(type || "text/csv") + ";charset=utf-8"});
+  // CSV は Excel で文字化けしないよう先頭に BOM を付ける。
+  // JSON に BOM を付けると読み込み時に壊れるので付けない。
+  const isCSV = !type || type === "text/csv";
+  const blob = new Blob([(isCSV ? "﻿" : "") + text],
+    {type:(type || "text/csv") + ";charset=utf-8"});
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob); a.download = name;
   document.body.appendChild(a); a.click();
@@ -1067,29 +1977,58 @@ function exportCSV(store){
     const rows = [...S.meals].sort((a,b)=>a.datetime.localeCompare(b.datetime));
     download("meal_" + stamp + ".csv", toCSV(rows,
       ["datetime","mealType","items","tags","eatOut","note"]));
-  } else {
+  } else if(store === "daily"){
     const rows = [...S.daily].sort((a,b)=>a.date.localeCompare(b.date));
     download("daily_" + stamp + ".csv", toCSV(rows,
       ["date","sleepHours","weight","stress","condition","dayType","meds","note"]));
+  } else if(store === "sleep"){
+    const rows = [...S.sleep].sort((a,b)=>a.sleepAt.localeCompare(b.sleepAt))
+      .map(s => ({...s, hours: s.wakeAt
+        ? ((new Date(s.wakeAt) - new Date(s.sleepAt)) / 3600000).toFixed(2) : ""}));
+    download("sleep_" + stamp + ".csv", toCSV(rows, ["sleepAt","wakeAt","hours","note"]));
+  } else if(store === "headaches"){
+    const rows = [...S.headaches].sort((a,b)=>a.startAt.localeCompare(b.startAt))
+      .map(h => ({...h, durationHours: h.endAt
+        ? ((new Date(h.endAt) - new Date(h.startAt)) / 3600000).toFixed(2) : ""}));
+    download("headache_" + stamp + ".csv", toCSV(rows,
+      ["startAt","endAt","durationHours","severity","side","aura","throbbing",
+       "photophobia","phonophobia","nausea","note"]));
+  } else if(store === "doses"){
+    const rows = [...S.doses].sort((a,b)=>a.datetime.localeCompare(b.datetime))
+      .map(d => ({...d, effect: (d.effect == null ? "" : EFFECTS[d.effect])}));
+    download("medication_" + stamp + ".csv", toCSV(rows,
+      ["datetime","medName","type","tablets","effect","note"]));
+  } else if(store === "pressure"){
+    const rows = [...S.pressure].sort((a,b)=>a.date.localeCompare(b.date))
+      .map(p => ({date:p.date, avg:(pressureDayAvg(p.date) || 0).toFixed(1),
+        delta:(pressureDelta(p.date) == null ? "" : pressureDelta(p.date).toFixed(1))}));
+    download("pressure_" + stamp + ".csv", toCSV(rows, ["date","avg","delta"]));
   }
 }
 function exportJSON(){
   download("backup_" + dateKey(new Date()) + ".json",
-    JSON.stringify({version:1, exportedAt:new Date().toISOString(),
+    JSON.stringify({version:2, exportedAt:new Date().toISOString(),
       stools:S.stools, meals:S.meals, daily:S.daily,
-      dict:S.dict, templates:S.templates}, null, 2), "application/json");
+      sleep:S.sleep, headaches:S.headaches, doses:S.doses,
+      dict:S.dict, templates:S.templates, meds:S.meds, geo:S.geo}, null, 2), "application/json");
 }
 async function importJSON(ev){
   const f = ev.target.files[0]; if(!f) return;
   try{
-    const data = JSON.parse(await f.text());
+    // 古いバックアップには先頭に BOM が入っていることがあるので取り除く
+    const data = JSON.parse((await f.text()).replace(/^﻿/, ""));
     if(!confirm("読み込むと、いまの記録は上書きされます。よろしいですか？")) return;
-    for(const st of ["stools","meals","daily"]) await dbClear(st);
-    for(const s of (data.stools||[])) await dbPut("stools", s);
-    for(const m of (data.meals ||[])) await dbPut("meals",  m);
-    for(const d of (data.daily ||[])) await dbPut("daily",  d);
+    for(const st of ["stools","meals","daily","sleep","headaches","doses"]) await dbClear(st);
+    for(const s of (data.stools   ||[])) await dbPut("stools",    s);
+    for(const m of (data.meals    ||[])) await dbPut("meals",     m);
+    for(const d of (data.daily    ||[])) await dbPut("daily",     d);
+    for(const s of (data.sleep    ||[])) await dbPut("sleep",     s);
+    for(const h of (data.headaches||[])) await dbPut("headaches", h);
+    for(const d of (data.doses    ||[])) await dbPut("doses",     d);
     if(data.dict)      await dbPut("kv", {key:"dict",      value:data.dict});
     if(data.templates) await dbPut("kv", {key:"templates", value:data.templates});
+    if(data.meds)      await dbPut("kv", {key:"meds",      value:data.meds});
+    if(data.geo)       await dbPut("kv", {key:"geo",       value:data.geo});
     await loadAll();
     alert("読み込みました。");
     show("home");
@@ -1113,8 +2052,59 @@ function showSummary(){
   const wLine = weights.length >= 2
     ? weights[0].weight + "kg → " + weights[weights.length-1].weight + "kg"
     : (weights.length ? weights[0].weight + "kg" : "記録なし");
-  const sleeps = dl.filter(d => d.sleepHours != null).map(d => d.sleepHours);
+  const sleeps = [];
+  for(let i = 0; i < days; i++){
+    const h = sleepHoursFor(dateKey(daysAgo(i)));
+    if(h != null) sleeps.push(h);
+  }
   const alerts = checkAlerts();
+
+  // 頭痛
+  const hs = S.headaches.filter(h => new Date(h.startAt) >= since);
+  const hDays = new Set(hs.map(h => dateKey(new Date(h.startAt)))).size;
+  const durs = hs.filter(h => h.endAt).map(h => (new Date(h.endAt) - new Date(h.startAt)) / 3600000);
+  const sevs = hs.map(h => h.severity).filter(v => v != null);
+  const cnt = f => hs.filter(f).length;
+  const headBlock =
+"■ 頭痛\n" +
+"　発作 " + hs.length + " 回 ／ 頭痛のあった日 " + hDays + " 日（" + days + "日中）\n" +
+"　強さ：平均 " + (sevs.length ? (sevs.reduce((a,b)=>a+b,0)/sevs.length).toFixed(1) : "—")
+  + " ／ 最大 " + (sevs.length ? Math.max(...sevs) : "—") + "\n" +
+"　持続：平均 " + (durs.length ? (durs.reduce((a,b)=>a+b,0)/durs.length).toFixed(1) + " 時間" : "—")
+  + " ／ 最長 " + (durs.length ? Math.max(...durs).toFixed(1) + " 時間" : "—") + "\n" +
+"　前兆 " + cnt(h=>h.aura) + " 回 ／ 拍動性 " + cnt(h=>h.throbbing) + " 回 ／ 光過敏 "
+  + cnt(h=>h.photophobia) + " 回 ／ 音過敏 " + cnt(h=>h.phonophobia) + " 回 ／ 嘔気 "
+  + cnt(h=>h.nausea) + " 回\n\n";
+
+  // 服薬
+  const dz = S.doses.filter(d => new Date(d.datetime) >= since);
+  const md = medDaysByType(days);
+  const perMed = {};
+  dz.forEach(d => {
+    if(!perMed[d.medName]) perMed[d.medName] = {n:0, tab:0, days:new Set()};
+    perMed[d.medName].n++;
+    perMed[d.medName].tab += Number(d.tablets) || 0;
+    perMed[d.medName].days.add(dateKey(new Date(d.datetime)));
+  });
+  const doseBlock =
+"■ 頭痛薬\n" +
+(Object.keys(perMed).length
+  ? Object.keys(perMed).map(k => "　" + k + "：" + perMed[k].days.size + "日 / 計 "
+      + perMed[k].tab + "錠（" + perMed[k].n + "回）").join("\n") + "\n"
+  : "　記録なし\n") +
+"　種類別の服用日数：トリプタン系 " + md.triptan + "日 ／ 鎮痛薬 " + md.nsaid + "日"
+  + ((md.triptan >= 10 || md.nsaid >= 15) ? "　←薬剤の使用過多に注意" : "") + "\n\n";
+
+  // 気圧
+  const pv = [];
+  for(let i = 0; i < days; i++){
+    const d = pressureDelta(dateKey(daysAgo(i)));
+    if(d != null) pv.push(d);
+  }
+  const pressBlock = pv.length
+    ? "　気圧：" + (S.geo.label || "") + "　前日差の最小 " + Math.min(...pv).toFixed(1)
+      + " hPa ／ 6hPa以上の低下 " + pv.filter(v => v <= -6).length + " 日\n"
+    : "";
 
   const text =
 "【受診用サマリ】\n" +
@@ -1126,13 +2116,19 @@ function showSummary(){
 "　夜間排便：" + st.filter(s=>s.nocturnal).length + " 回\n" +
 "　残便感：" + st.filter(s=>s.incomplete).length + " 回 ／ 粘液：" + st.filter(s=>s.mucus).length + " 回\n" +
 "　腹痛あり（1以上）：" + st.filter(s=>s.pain).length + " 回\n\n" +
+headBlock +
+doseBlock +
 "■ 食事\n" +
 "　記録 " + ml.length + " 件 ／ 外食 " + ml.filter(m=>m.eatOut).length + " 件\n" +
 "　多かったタグ：" + topTags + "\n\n" +
 "■ 生活\n" +
 "　体重：" + wLine + "\n" +
-"　睡眠：" + (sleeps.length ? "平均 " + (sleeps.reduce((a,b)=>a+b,0)/sleeps.length).toFixed(1) + " 時間" : "記録なし") + "\n" +
-"　服薬・サプリ：" + meds + "\n\n" +
+"　睡眠：" + (sleeps.length
+  ? "平均 " + (sleeps.reduce((a,b)=>a+b,0)/sleeps.length).toFixed(1) + " 時間（最短 "
+    + Math.min(...sleeps).toFixed(1) + " ／ 最長 " + Math.max(...sleeps).toFixed(1) + "）"
+  : "記録なし") + "\n" +
+pressBlock +
+"　その他の服薬・サプリ：" + meds + "\n\n" +
 "■ 気になる所見\n" +
 (alerts.length ? alerts.map(a => "　・" + a).join("\n") : "　特記なし") + "\n\n" +
 "※これは自己記録の要約です。相関であって因果ではありません。診断は医師にご相談ください。";
@@ -1178,7 +2174,8 @@ async function resetDict(){
 async function wipeAll(){
   if(!confirm("すべての記録を削除します。取り消せません。よろしいですか？")) return;
   if(!confirm("本当に削除しますか？　先にバックアップを取ることをおすすめします。")) return;
-  for(const st of ["stools","meals","daily","kv"]) await dbClear(st);
+  for(const st of ["stools","meals","daily","sleep","headaches","doses","pressure","kv"])
+    await dbClear(st);
   await loadAll();
   alert("削除しました。");
   show("home");
@@ -1188,14 +2185,22 @@ async function wipeAll(){
    13. 起動
    ========================================================= */
 async function loadAll(){
-  S.stools = await dbGetAll("stools");
-  S.meals  = await dbGetAll("meals");
-  S.daily  = await dbGetAll("daily");
+  S.stools    = await dbGetAll("stools");
+  S.meals     = await dbGetAll("meals");
+  S.daily     = await dbGetAll("daily");
+  S.sleep     = await dbGetAll("sleep");
+  S.headaches = await dbGetAll("headaches");
+  S.doses     = await dbGetAll("doses");
+  S.pressure  = await dbGetAll("pressure");
   const kv = await dbGetAll("kv");
-  const dictRec = kv.find(k => k.key === "dict");
-  const tmplRec = kv.find(k => k.key === "templates");
-  S.dict = dictRec ? dictRec.value : JSON.parse(JSON.stringify(DEFAULT_DICT));
-  S.templates = tmplRec ? tmplRec.value : [];
+  const pick = (key, fallback) => {
+    const r = kv.find(k => k.key === key);
+    return r && r.value !== undefined && r.value !== null ? r.value : fallback;
+  };
+  S.dict      = pick("dict",      JSON.parse(JSON.stringify(DEFAULT_DICT)));
+  S.templates = pick("templates", []);
+  S.meds      = pick("meds",      JSON.parse(JSON.stringify(DEFAULT_MEDS)));
+  S.geo       = pick("geo",       JSON.parse(JSON.stringify(DEFAULT_GEO)));
 }
 (async function init(){
   try{
@@ -1208,6 +2213,10 @@ async function loadAll(){
     return;
   }
   renderHome();
+  // 気圧はネットにつながっていれば裏で取ってくる（失敗しても何も起きない）
+  fetchPressure(false).then(r => { if(r !== "skip") renderHome(); }).catch(() => {});
+  // 経過時間の表示を1分ごとに更新
+  setInterval(() => { if(S.view === "home"){ renderSleepCard(); renderHeadacheCard(); } }, 60000);
   if("serviceWorker" in navigator){
     window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(()=>{}));
   }
