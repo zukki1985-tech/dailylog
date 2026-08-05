@@ -483,6 +483,8 @@ details .inner{padding-bottom:14px}
       <h2>③ 天気（自動）</h2>
       <div class="hint">入力は要りません。指定した地点の記録が自動で入ります。</div>
       <div class="wx"><span class="ic" id="dWxIcon"></span><span class="tx" id="dWxText"></span></div>
+      <div class="hint" style="margin:12px 0 6px">実際とちがうときは、ここで直せます。</div>
+      <div class="chips" id="dWxFix"></div>
     </div>
 
     <button class="save" onclick="saveDaily()">保存する</button>
@@ -771,6 +773,11 @@ const WMO = [
   {codes:[95,96,99],              label:"雷雨",     icon:"⛈️",  group:"雷"}
 ];
 const WEATHER_GROUPS = ["晴れ","曇り","霧","雨","雪","雷"];
+const WEATHER_ICONS = {
+  "晴れ":{icon:"🌤️"}, "曇り":{icon:"☁️"}, "霧":{icon:"🌫️"},
+  "雨":{icon:"🌧️"}, "雪":{icon:"🌨️"}, "雷":{icon:"⛈️"}
+};
+const WEATHER_SCHEMA = 3;   // 天気データの形。上げると次回起動でまとめて取り直す
 function wmo(code){
   if(code == null) return {label:"—", icon:"", group:null};
   return WMO.find(w => w.codes.includes(Number(code))) || {label:"—", icon:"", group:null};
@@ -1213,7 +1220,7 @@ function loadDaily(){
   const key = $("d_date").value;
   const rec = S.daily.find(d => d.date === key)
     || {date:key, sleepHours:"", weight:"", stress:null, condition:null,
-        dayType:null, meds:[], note:"", headache:null};
+        dayType:null, meds:[], note:"", headache:null, weather:null};
   dailyDraft = JSON.parse(JSON.stringify(rec));
   $("d_sleep").value  = dailyDraft.sleepHours ?? "";
   $("d_weight").value = dailyDraft.weight ?? "";
@@ -1357,11 +1364,37 @@ async function addExtraHeadache(){
   setDT("hEnd", null);
 }
 function renderDailyWeather(){
-  const wt = weatherText($("d_date").value);
-  $("dWxIcon").textContent = wt ? wt.icon : "";
-  $("dWxText").innerHTML = wt
-    ? "<b>" + esc(wt.label) + "</b>　" + esc(wt.temp) + esc(wt.precip)
+  const k = $("d_date").value;
+  const wt = weatherText(k);
+  // 保存前でも、いま選んでいる値をそのまま見せる
+  const pick = dailyDraft ? dailyDraft.weather : null;
+  const icon = pick ? WEATHER_ICONS[pick].icon : (wt ? wt.icon : "");
+  const label = pick ? pick : (wt ? wt.label : "");
+  $("dWxIcon").textContent = icon;
+  $("dWxText").innerHTML = (wt || pick)
+    ? "<b>" + esc(label) + "</b>　" + esc(wt ? wt.temp : "") + esc(wt ? wt.precip : "")
+      + (pick ? '<br><span style="color:#5a6650">手で直したもの</span>' : "")
     : "この日の天気はまだ取得できていません";
+
+  const el = $("dWxFix"); el.innerHTML = "";
+  WEATHER_GROUPS.forEach(g => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "chip" + (dailyDraft.weather === g ? " on" : "");
+    b.textContent = WEATHER_ICONS[g].icon + " " + g;
+    b.onclick = () => {
+      dailyDraft.weather = (dailyDraft.weather === g) ? null : g;
+      renderDailyWeather();
+    };
+    el.appendChild(b);
+  });
+  if(dailyDraft.weather){
+    const r = document.createElement("button");
+    r.type = "button"; r.className = "chip";
+    r.textContent = "自動に戻す";
+    r.onclick = () => { dailyDraft.weather = null; renderDailyWeather(); };
+    el.appendChild(r);
+  }
 }
 async function saveDaily(silent){
   const d = dailyDraft;
@@ -1638,8 +1671,8 @@ async function fetchWeather(force){
   const url = "https://api.open-meteo.com/v1/forecast"
     + "?latitude=" + encodeURIComponent(g.lat)
     + "&longitude=" + encodeURIComponent(g.lon)
-    + "&hourly=pressure_msl"
-    + "&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum"
+    + "&hourly=pressure_msl,cloud_cover"
+    + "&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_hours"
     + "&timezone=Asia%2FTokyo&past_days=92&forecast_days=2";
   const res = await fetch(url);
   if(!res.ok) throw new Error("通信エラー（" + res.status + "）");
@@ -1648,41 +1681,101 @@ async function fetchWeather(force){
     throw new Error("受け取ったデータの形が想定と違います");
 
   const map = {};
+  const cloudSum = {};
   j.hourly.time.forEach((t, i) => {
     const k = t.slice(0, 10), h = Number(t.slice(11, 13));
     if(!map[k]) map[k] = {date:k, hours:new Array(24).fill(null)};
     map[k].hours[h] = j.hourly.pressure_msl[i];
+    const c = Array.isArray(j.hourly.cloud_cover) ? j.hourly.cloud_cover[i] : null;
+    if(c != null && !isNaN(c)){
+      if(!cloudSum[k]) cloudSum[k] = {sum:0, n:0};
+      cloudSum[k].sum += c; cloudSum[k].n++;
+    }
   });
   // 天気は日ごと。取れなくても気圧だけは保存する
   if(j.daily && Array.isArray(j.daily.time)){
     j.daily.time.forEach((k, i) => {
       if(!map[k]) map[k] = {date:k, hours:new Array(24).fill(null)};
       const g2 = (arr) => (Array.isArray(arr) ? arr[i] : null);
-      map[k].wcode  = g2(j.daily.weather_code);
-      map[k].tmax   = g2(j.daily.temperature_2m_max);
-      map[k].tmin   = g2(j.daily.temperature_2m_min);
-      map[k].precip = g2(j.daily.precipitation_sum);
+      map[k].wcode       = g2(j.daily.weather_code);
+      map[k].tmax        = g2(j.daily.temperature_2m_max);
+      map[k].tmin        = g2(j.daily.temperature_2m_min);
+      map[k].precip      = g2(j.daily.precipitation_sum);
+      map[k].precipHours = g2(j.daily.precipitation_hours);
     });
   }
+  Object.keys(cloudSum).forEach(k => {
+    if(map[k]) map[k].cloud = Math.round(cloudSum[k].sum / cloudSum[k].n);
+  });
   for(const k of Object.keys(map)) await dbPut("pressure", map[k]);
   await dbPut("kv", {key:"pressureFetchedAt", value:new Date().toISOString()});
   // 天気まで取れたときだけ印を付ける。これが付くまでは毎回取りにいく
   // （気圧だけの古いデータが残っていると、6時間の待ち時間で天気が入らないため）
   if(j.daily && Array.isArray(j.daily.time)){
-    await dbPut("kv", {key:"weatherSchema", value:2});
-    S.weatherSchema = 2;
+    await dbPut("kv", {key:"weatherSchema", value:WEATHER_SCHEMA});
+    S.weatherSchema = WEATHER_SCHEMA;
   }
   S.pressure = await dbGetAll("pressure");
   return Object.keys(map).length + "日分";
 }
 function weatherOf(k){ return S.pressure.find(p => p.date === k) || null; }
+
+/* 天気の補正
+   -----------------------------------------------------------
+   Open-Meteo が返す weather_code は数値予報の結果で、次の2つの理由から
+   「降っていないのに霧雨」になりやすい。
+     ・1日ぶんの代表値は「その日いちばん強い天気」で決まるため、
+       明け方に0.1mmの予報が出ただけで、1日中「霧雨」になる
+     ・数値予報はごく弱い雨を出しすぎる傾向がある（よく知られた癖）
+   そこで、雨系のコードでも実際の降水量がごくわずかな日は、
+   雲の量から「快晴／晴れ／薄曇り／曇り」に置き換えている。 */
+const PRECIP_MIN = 0.5;   // これ未満（mm/日）は「降らなかった」とみなす
+
+function derivedWeather(r){
+  if(!r || r.wcode == null) return null;
+  const c = Number(r.wcode);
+  const base = wmo(c);
+  const rainish = (c >= 51 && c <= 67) || (c >= 80 && c <= 82);
+  const tiny = (r.precip == null || r.precip < PRECIP_MIN)
+            && (r.precipHours == null || r.precipHours <= 3);
+  if(rainish && tiny){
+    const cl = r.cloud;
+    let code = 3;                       // 雲の量が分からなければ「曇り」
+    if(cl != null){
+      if(cl < 20) code = 0;
+      else if(cl < 60) code = 1;
+      else if(cl < 85) code = 2;
+    }
+    return Object.assign({}, wmo(code), {corrected:true});
+  }
+  return Object.assign({}, base, {corrected:false});
+}
+// 手動で直した天気（「今日の記録」の③で選べる）
+function manualWeather(k){
+  const d = S.daily.find(x => x.date === k);
+  return (d && d.weather) ? d.weather : null;
+}
+function weatherGroup(k){
+  const m = manualWeather(k); if(m) return m;
+  const w = derivedWeather(weatherOf(k));
+  return w ? w.group : null;
+}
 function weatherText(k){
   const r = weatherOf(k); if(!r) return null;
-  const w = wmo(r.wcode);
+  const w = derivedWeather(r); if(!w) return null;
+  const m = manualWeather(k);
+  const g = m ? WEATHER_ICONS[m] : null;
   const t = (r.tmax != null && r.tmin != null)
     ? "最高 " + Math.round(r.tmax) + "℃ / 最低 " + Math.round(r.tmin) + "℃" : "";
-  const p = (r.precip != null && r.precip > 0) ? "　降水 " + r.precip + "mm" : "";
-  return {icon:w.icon, label:w.label, temp:t, precip:p, group:w.group};
+  const p = (r.precip != null && r.precip > 0) ? "　降水 " + r.precip + "mm" : "　降水なし";
+  return {
+    icon:  m ? g.icon : w.icon,
+    label: m ? m : w.label,
+    temp:t, precip:p,
+    group: m ? m : w.group,
+    manual: !!m,
+    corrected: !m && w.corrected
+  };
 }
 async function manualFetchPressure(){
   $("pressureStatus").textContent = "取得中…";
@@ -2204,8 +2297,7 @@ function anWeather(){
   WEATHER_GROUPS.forEach(x => g[x] = {n:0, k:0});
   let cover = 0;
   allDates().forEach(k => {
-    const r = weatherOf(k); if(!r || r.wcode == null) return;
-    const grp = wmo(r.wcode).group; if(!grp || !g[grp]) return;
+    const grp = weatherGroup(k); if(!grp || !g[grp]) return;
     cover++; g[grp].n++; if(hd.has(k)) g[grp].k++;
   });
   if(cover < MIN_N) return '<div class="nodata">重なっている日数がまだ足りません。</div>';
@@ -2216,7 +2308,9 @@ function anWeather(){
         + g[x].n + "日)</span></span><span class=\"tr\"></span><span class=\"vl\">データ不足</span></div>"
     ).join("")
     + '<div class="note">その日の天気ごとに、頭痛が始まった割合です（' + cover + " 日分）。"
-    + "天気は1日ぶんの代表値なので、朝と夕方で大きく変わった日はうまく表せません。</div>" + DISCLAIM;
+    + "天気は1日ぶんの代表値なので、朝と夕方で大きく変わった日はうまく表せません。"
+    + "降水量が0.5mm未満の日は「雨」ではなく雲の量で判定しています。"
+    + "「今日の記録」の③で手で直した日は、その値を使います。</div>" + DISCLAIM;
 }
 
 /* --- 食事タグ × おなかの調子 --- */
@@ -2387,14 +2481,22 @@ function exportCSV(store){
       ["datetime","medName","type","tablets","effect","note"]));
   } else if(store === "pressure"){
     const rows = [...S.pressure].sort((a,b)=>a.date.localeCompare(b.date))
-      .map(p => ({date:p.date,
-        pressureAvg:(pressureDayAvg(p.date) == null ? "" : pressureDayAvg(p.date).toFixed(1)),
-        pressureDelta:(pressureDelta(p.date) == null ? "" : pressureDelta(p.date).toFixed(1)),
-        weather:wmo(p.wcode).label, weatherCode:(p.wcode == null ? "" : p.wcode),
-        tempMax:(p.tmax == null ? "" : p.tmax), tempMin:(p.tmin == null ? "" : p.tmin),
-        precipitation:(p.precip == null ? "" : p.precip)}));
+      .map(p => {
+        const w = derivedWeather(p) || {};
+        const m = manualWeather(p.date);
+        return {date:p.date,
+          weather:(m || w.label || ""), source:(m ? "手入力" : (w.corrected ? "補正" : "APIそのまま")),
+          rawCode:(p.wcode == null ? "" : p.wcode), rawWeather:wmo(p.wcode).label,
+          tempMax:(p.tmax == null ? "" : p.tmax), tempMin:(p.tmin == null ? "" : p.tmin),
+          precipitation:(p.precip == null ? "" : p.precip),
+          precipHours:(p.precipHours == null ? "" : p.precipHours),
+          cloudCover:(p.cloud == null ? "" : p.cloud),
+          pressureAvg:(pressureDayAvg(p.date) == null ? "" : pressureDayAvg(p.date).toFixed(1)),
+          pressureDelta:(pressureDelta(p.date) == null ? "" : pressureDelta(p.date).toFixed(1))};
+      });
     download("weather_" + stamp + ".csv", toCSV(rows,
-      ["date","weather","weatherCode","tempMax","tempMin","precipitation","pressureAvg","pressureDelta"]));
+      ["date","weather","source","rawCode","rawWeather","tempMax","tempMin",
+       "precipitation","precipHours","cloudCover","pressureAvg","pressureDelta"]));
   }
 }
 function exportJSON(){
@@ -2503,8 +2605,7 @@ function showSummary(){
   const wg = {}, wgHead = {};
   for(let i = 0; i < days; i++){
     const k = dateKey(daysAgo(i));
-    const r = weatherOf(k); if(!r || r.wcode == null) continue;
-    const grp = wmo(r.wcode).group; if(!grp) continue;
+    const grp = weatherGroup(k); if(!grp) continue;
     wg[grp] = (wg[grp] || 0) + 1;
     if(hdSet.has(k)) wgHead[grp] = (wgHead[grp] || 0) + 1;
   }
@@ -2641,7 +2742,7 @@ async function migrateStressScale(){
   renderHome();
   // 天気・気圧はネットにつながっていれば裏で取ってくる（失敗しても何も起きない）。
   // まだ天気を一度も取れていないときは、6時間の待ち時間を無視して取りにいく。
-  fetchWeather(S.weatherSchema < 2).then(r => { if(r !== "skip") renderHome(); }).catch(() => {});
+  fetchWeather(S.weatherSchema < WEATHER_SCHEMA).then(r => { if(r !== "skip") renderHome(); }).catch(() => {});
   // 経過時間の表示を1分ごとに更新
   setInterval(() => { if(S.view === "home"){ renderSleepCard(); renderHeadacheCard(); } }, 60000);
   if("serviceWorker" in navigator){
